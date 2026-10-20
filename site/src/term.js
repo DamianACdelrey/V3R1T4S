@@ -39,7 +39,8 @@
     ['clear', 'clear the screen'],
     ['exit', 'close (or Esc)']
   ];
-  var SECTIONS = { weekly: 'w', feed: 'd', discoveries: 'd', board: 'b', leaderboard: 'b', ku: 'u', unknowns: 'u' };
+  /* no prototype: 'cd constructor' or 'cd __proto__' is just an unknown section */
+  var SECTIONS = Object.assign(Object.create(null), { weekly: 'w', feed: 'd', discoveries: 'd', board: 'b', leaderboard: 'b', ku: 'u', unknowns: 'u' });
 
   var CMD = {
     help: function () {
@@ -58,7 +59,8 @@
       line('ku/       ' + c.ku + ' known unknowns');
     },
     cd: function (a, cat) {
-      var k = SECTIONS[(a[0] || '').replace(/\/$/, '')];
+      var k = SECTIONS[String(a[0] || '').replace(/\/$/, '')];
+      if (typeof k !== 'string') k = null;
       if (!k) { line('cd: no such section: ' + (a[0] || '') + ' (try weekly, feed, board, ku)', 'err'); return; }
       if (k === 'w' && !API.counts().weekly) { line('cd: no weekly edition in this build yet', 'err'); return; }
       if (cat) {

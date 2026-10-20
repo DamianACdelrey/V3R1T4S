@@ -449,20 +449,25 @@ def parse_news_file(name):
         return bad("%d bullets, the limit is %d" % (len(bullets), NEWS_BULLETS))
     out_b = []
     for b in bullets:
-        body, path = b, None
+        # Only a final " → known-knowns/..." or " → known-unknowns/..." token is a link path. Any other tail
+        # (5/6 → 6/7, 23:10 → 23:59, a URL) is ordinary text and stays. A path that fails the checks is kept
+        # as plain text too, never as a link, so the bullet never loses words.
+        body, path, shown = b, None, b
         head, sep, tail = b.rpartition(" → ")
         tail = tail.strip()
-        if sep and tail and not re.search(r"\s", tail) and ("/" in tail or ":" in tail):
+        if sep and tail and not re.search(r"\s", tail) and tail.startswith(("known-knowns/", "known-unknowns/")):
             body = head.strip()
             path = news_path(tail)
             if path is None:
-                warn("news %s: link dropped (not an existing known-knowns/ or known-unknowns/ path): %r"
-                     % (clean(name, 40), clean(tail, 80)))
+                warn("news %s: link dropped, kept as text (not an existing known-knowns/ or known-unknowns/ "
+                     "path): %r" % (clean(name, 40), clean(tail, 80)))
+            else:
+                shown = body
         if not body:
             return bad("empty bullet")
         if len(body) >= NEWS_BULLET_CHARS:
             return bad("a bullet is %d characters, the limit is under %d" % (len(body), NEWS_BULLET_CHARS))
-        out_b.append({"t": news_text(body), "path": path})
+        out_b.append({"t": news_text(shown), "path": path})
     return {
         "id": fdate, "title": "V3R1T4S Weekly · %s → %s" % (d_from, d_to), "from": d_from, "to": d_to,
         "paras": [news_text(x) for x in paras], "bullets": out_b,
@@ -741,7 +746,8 @@ def render_template(name, data, site_url):
         "BUILT": esc(data["built"][:10]),
         "BUILT_ISO": esc(data["built"]),
         "COMMIT": esc(commit),
-        "COMMIT_LINK": (' · <a id="commit" href="%s/commit/%s">%s</a>' % (GH, esc(commit), esc(commit[:7]))
+        # plain text, not a link: a squash-merged PR at HEAD is authored by the contributor's own git identity
+        "COMMIT_LINK": (' · <code id="commit" title="%s">%s</code>' % (esc(commit), esc(commit[:7]))
                         if re.match(r"^[0-9a-f]{7,40}\Z", commit) else ""),
         "YEAR": esc(data["built"][:4]),
         # server-rendered snapshot: already escaped HTML (see ssr_*)
@@ -754,10 +760,11 @@ def render_template(name, data, site_url):
     if unknown:
         sys.exit("site/src/%s: unknown placeholder(s) %s (known: %s)"
                  % (name, ", ".join("{{%s}}" % x for x in unknown), ", ".join(sorted(subs))))
-    out = re.sub(r"\{\{([A-Z_]+)\}\}", lambda m: subs[m.group(1)], tpl)
-    if "{{" in out:
+    # Validate the template only: substituted values may contain "{{" (math such as {{1,2},{3}} in a contributor
+    # title) and re.sub with a function never re-expands what it inserts.
+    if "{{" in re.sub(r"\{\{([A-Z_]+)\}\}", "", tpl):
         sys.exit("site/src/%s: malformed placeholder" % name)
-    return out
+    return re.sub(r"\{\{([A-Z_]+)\}\}", lambda m: subs[m.group(1)], tpl)
 
 
 # ------------------------------------------------------------------ server-rendered snapshot (no-JS fallback)

@@ -69,7 +69,7 @@ project's Custom domains tab. Pages honours `_headers` and `404.html` the same w
 |---|---|
 | big numbers | `TROPHY_CASE.md` "All rows" (results), the package `INDEX.csv` rows (contributed rows), distinct credit names in package folders (contributors), `bank/targets.json` (open problems) |
 | V3R1T4S Weekly | `news/YYYY-MM-DD.md`, newest first, up to 52 editions (see below) |
-| Daily discoveries | every result package `known-knowns/<family>/<YYYY-MM-DD>-<credit>-<hash8>/`, newest merge first, grouped by merge day (UTC). Title: the package README's first heading. Margin: `value vs table_value` from `INDEX.csv` when both are numbers. ✅ when a maintainer note in the package README says the table owner adopted it, otherwise 🧪. Each links to its package folder, never to a pull request, so an `anonymous-…` credit stays anonymous on the site. |
+| Daily discoveries | every result package `known-knowns/<family>/<YYYY-MM-DD>-<credit>-<hash8>/`, newest merge first, grouped by merge day (UTC). Title: the package README's first heading. Margin: `value vs table_value` from `INDEX.csv` when both are numbers. ✅ when a maintainer note in the package README says the table owner adopted it, otherwise 🧪. Each links to its package folder, never to a pull request, and the footer shows the build commit as plain text, not a link. GitHub's own folder pages show the latest commit's author, so an `anonymous-…` credit is only as anonymous as the contributor's GitHub account and git identity. |
 | Leaderboard | top 10 credit names by merged result packages, read from folder names. |
 | Known unknowns | all of `bank/targets.json`, with category chips (`bank/categories.json`, emoji from the README table) and a search box. Each links to its `known-unknowns/<category>/<id>.md` page. |
 
@@ -90,7 +90,9 @@ leaderboard and the first 24 known unknowns into `index.html` (escaped, same mar
   known-unknowns/<category>/<id>.md` (AGENTS.md makes a named problem the first quarry). **Roll** jumps to a random
   target from the current filters.
 - **Keys:** `/` search, `↓ ↑` walk results, `Esc` clear, `g` then `w d b u` jump to a section, `c` copy the join
-  command, `Shift+R` roll, `` ` `` terminal, `?` the key sheet (which can switch single-key shortcuts off).
+  command, `Shift+R` roll, `` ` `` terminal, `?` the key sheet. Its "Single-key shortcuts" switch (WCAG 2.1.4) turns off
+  every printable-key shortcut, `/` and `?` included, and the typed eggs; `Esc`, the arrow keys and the footer
+  **? keys** button keep working.
 - **Easter eggs** (decoration only; they never change data, numbers or the join command, and `Esc` ends them):
   type `liberate` or the Konami code, type `pliny`, open the terminal and try `sudo liberate`, copy the join command,
   or visit any missing page. Remove the `eggs.js` script tag and the page works the same without them.
@@ -119,9 +121,10 @@ no quotes or tables. Inline **bold**, `code` and [text](link) are reduced to the
 
 - Line 1 is exactly the heading above (dates `YYYY-MM-DD`, at most 31 days apart). The file's own date must be from
   the second date to 7 days after it.
-- A bullet link must be an existing `known-knowns/<family>[/<package>]` or `known-unknowns/<category>[/<id>.md]`
-  path whose every segment passes the same name checks as the rest of the site; otherwise the link is dropped (the
-  bullet stays) with a warning. Links point to `https://github.com/elder-plinius/V3R1T4S/tree/main/<path>`.
+- Only a final ` → known-knowns/…` or ` → known-unknowns/…` is a link; any other ` → …` (`5/6 → 6/7`,
+  `23:10 → 23:59`) is ordinary text. A link must be an existing `known-knowns/<family>[/<package>]` or
+  `known-unknowns/<category>[/<id>.md]` path whose every segment passes the same name checks as the rest of the
+  site; otherwise it is shown as plain text, not a link, with a warning. Links point to `https://github.com/elder-plinius/V3R1T4S/tree/main/<path>`.
 - Files must be valid UTF-8, at most 16 KB, regular files (no symlinks). Each edition is linkable as `#w-<date>`.
 
 ### Suggestions

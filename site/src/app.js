@@ -15,9 +15,11 @@
   var SAFE_URL = /^https:\/\/github\.com\/elder-plinius\/V3R1T4S\/[A-Za-z0-9._~\/?=&%-]*$/;
   var H_U = /^#u-([a-z0-9][a-z0-9-]{0,99})$/, H_D = new RegExp('^#d-(' + PKG_SRC + ')$'), H_W = /^#w-(\d{4}-\d{2}-\d{2})$/;
   var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  var MARK = { o: ['✅', 'Listed by the table owner'], v: ['🧪', 'Verified by us, not yet listed by the table owner'] };
+  var MARK = Object.assign(Object.create(null), { o: ['✅', 'Listed by the table owner'], v: ['🧪', 'Verified by us, not yet listed by the table owner'] });
   var CB = [['min', 'laptop-minutes'], ['hours', 'laptop-hours'], ['days', 'laptop-days'], ['cluster', 'cluster'], ['thought', 'pure thought']];
-  var CB_LABEL = {}; CB.forEach(function (c) { CB_LABEL[c[0]] = c[1]; });
+  /* lookup tables keyed by repo or URL strings have no prototype, so 'constructor' or '__proto__' never match */
+  function dict() { return Object.create(null); }
+  var CB_LABEL = dict(); CB.forEach(function (c) { CB_LABEL[c[0]] = c[1]; });
   var FEED_STEP = 12;
   var KU_STEP = window.matchMedia && matchMedia('(min-width: 960px)').matches ? 24 : 12;
   var SUGGEST = GH + '/issues/new?template=suggest-known-unknown.yml';
@@ -102,7 +104,7 @@
 
   /* ---------------- state */
   var feed = [], feedShown = FEED_STEP, feedBy = null, feedView = [];
-  var ku = [], kuById = {}, cats = {}, catList = [], kinds = [], kuHits = [], kuShown = KU_STEP;
+  var ku = [], kuById = dict(), cats = dict(), catList = [], kinds = [], kuHits = [], kuShown = KU_STEP;
   var kuCat = null, kuKind = null, kuCp = null, words = [], lastRoll = null, loaded = false;
 
   function qv() { return str($('#q').value.trim(), 100); }
@@ -191,7 +193,7 @@
       c.addEventListener('click', function () { copyJoin(c); });
       p.appendChild(c); box.appendChild(p);
     }
-    var group = null, last = null, perDay = {};
+    var group = null, last = null, perDay = dict();
     feedView.forEach(function (x) { perDay[x.d] = (perDay[x.d] || 0) + 1; });
     feedView.slice(0, feedShown).forEach(function (x) {
       if (x.d !== last) {
@@ -268,7 +270,7 @@
   }
   function kuFilter() {
     words = qv().toLowerCase().split(/\s+/).filter(Boolean).slice(0, 8).map(function (w) { return w.slice(0, 30); });
-    var byCat = {}, byKind = {}, byCp = {}, all = 0;
+    var byCat = dict(), byKind = dict(), byCp = dict(), all = 0;
     kuHits = [];
     ku.forEach(function (k) {
       if (!matchQ(k)) return;
@@ -492,9 +494,9 @@
   }
 
   /* ---------------- sections */
-  var SEC = { w: '#wk-h', d: '#feed-h', b: '#lb-h', u: '#ku-h' };
+  var SEC = Object.assign(dict(), { w: '#wk-h', d: '#feed-h', b: '#lb-h', u: '#ku-h' });
   function goSection(key) {
-    var h = $(SEC[key] || key);
+    var h = typeof key === 'string' && SEC[key] ? $(SEC[key]) : null;
     if (!h) return false;
     if (!h.hasAttribute('tabindex')) h.tabIndex = -1;
     h.scrollIntoView({ block: 'start', behavior: RM.matches ? 'auto' : 'smooth' });
@@ -591,6 +593,10 @@
       var rows = $$('#feed .it'); if (rows[old]) { rows[old].tabIndex = -1; rows[old].focus(); }
       say('#live', 'Showing ' + fmt(Math.min(feedShown, feedView.length)) + ' of ' + fmt(feedView.length));
     });
+    /* the snapshot hides ranks 6-10 below 1024px only once JS runs (html.js), so offer "Show all" right away */
+    var bm0 = $('#board-more'), n0 = $$('#board li').length;
+    bm0.hidden = n0 <= 5; bm0.textContent = 'Show all ' + fmt(n0);
+    $('#copy').hidden = false; $('#tog').hidden = false;
     $('#board-more').addEventListener('click', function () {
       var bo = $('#board'), open = bo.classList.toggle('all');
       this.setAttribute('aria-expanded', String(open));
@@ -687,9 +693,10 @@
       if (editable(ev.target) || document.querySelector('dialog[open]')) return;
       var k = ev.key;
       if (k === 'Escape') { if (escape()) ev.preventDefault(); return; }
+      /* WCAG 2.1.4: the off switch covers every printable-key shortcut; the footer "? keys" button stays */
+      if (!keysOn() || ev.repeat) return;
       if (k === '/') { ev.preventDefault(); q.focus(); q.select(); return; }
       if (k === '?') { ev.preventDefault(); openKeys(); return; }
-      if (!keysOn() || ev.repeat) return;
       if (chord && Date.now() - chord < 1000) {
         chord = 0;
         if (SEC[k] && goSection(k)) ev.preventDefault();
@@ -742,7 +749,7 @@
       has: function (id) { return typeof id === 'string' && SLUG.test(id) && !!kuById[id]; },
       cats: function () { return catList.map(function (c) { return [c.id, c.n]; }); },
       roll: function () { var k = roll(); return k ? k.t : null; },
-      hunt: function (id) { return typeof id === 'string' && kuById[id] ? hunt(kuById[id]) : null; },
+      hunt: function (id) { return typeof id === 'string' && SLUG.test(id) && kuById[id] && SLUG.test(kuById[id].cat) ? hunt(kuById[id]) : null; },
       copyJoin: function () { copyJoin(); return JOIN; },
       ids: function (pre) { pre = String(pre || ''); return ku.filter(function (k) { return k.id.indexOf(pre) === 0; }).slice(0, 20).map(function (k) { return k.id; }); },
       counts: function () { return { feed: feed.length, board: $$('#board li').length, ku: ku.length, weekly: $$('.ed').length }; },

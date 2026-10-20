@@ -364,7 +364,7 @@ mark{background:var(--green-dim);color:inherit;border-radius:2px;text-decoration
 .w5{--w:5%}.w10{--w:10%}.w15{--w:15%}.w20{--w:20%}.w25{--w:25%}.w30{--w:30%}.w35{--w:35%}.w40{--w:40%}.w45{--w:45%}.w50{--w:50%}
 .w55{--w:55%}.w60{--w:60%}.w65{--w:65%}.w70{--w:70%}.w75{--w:75%}.w80{--w:80%}.w85{--w:85%}.w90{--w:90%}.w95{--w:95%}.w100{--w:100%}
 .board-more{margin:0 auto 14px}
-@media (max-width:1023px){.board:not(.all) li.x{display:none}}
+@media (max-width:1023px){.js .board:not(.all) li.x{display:none}}
 @media (min-width:1024px){.board-more{display:none}}
 @media (max-width:599px){.board-more{width:calc(100% - 32px)}}
 
@@ -407,7 +407,8 @@ mark{background:var(--green-dim);color:inherit;border-radius:2px;text-decoration
 .chip.sm{min-height:32px;padding:0 11px;font:400 13px/18px var(--mono)}
 .chip:hover{border-color:var(--green-line);color:var(--text-bright)}
 .chip .k{font:400 12px/1 var(--mono);color:var(--text-faint);font-variant-numeric:tabular-nums}
-.chip[data-zero]:not([aria-pressed="true"]){opacity:.55}
+.chip[data-zero]:not([aria-pressed="true"]){color:var(--text-dim);border-style:dashed;border-color:var(--line-2)}
+.chip[data-zero]:not([aria-pressed="true"]) .k{color:var(--text-dim)}
 .chip[aria-pressed="true"]{background:var(--green-dim);border-color:var(--green);color:var(--text-bright)}
 .chip[aria-pressed="true"]::before{content:"✓";font:700 13px/1 var(--mono);color:var(--green)}
 .chip[aria-pressed="true"] .k{color:var(--green)}
@@ -517,6 +518,7 @@ dialog{color:var(--text)}
 .keys dd{margin:0;color:var(--text-bright);font:400 15px/1.4 var(--sans)}
 .man-o{display:flex;align-items:center;gap:10px;min-height:44px;margin-top:12px;font:400 15px/1.4 var(--sans)}
 .man-o input{width:20px;height:20px;accent-color:var(--green)}
+.man-n{margin-top:2px;max-width:46ch;font:400 14px/1.5 var(--sans);color:var(--text-dim)}
 .man-a{margin-top:6px}
 .man-f{margin-top:14px;font:400 12px/1.4 var(--sym);color:var(--text-faint);text-align:center;white-space:nowrap;overflow:hidden}
 @media (max-width:479px){.keys>div{grid-template-columns:1fr;gap:2px}}

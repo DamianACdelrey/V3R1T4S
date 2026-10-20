@@ -4,7 +4,8 @@
      liberate  (or ↑↑↓↓←→←→BA)  glitch the banner and decode the tagline into the motto
      pliny                      leet mode on the site's own labels
      `  (or the footer button)  a small terminal (term.js, loaded on first use)
-     copying the join command   ✓ ARMED                                                                  */
+     copying the join command   ✓ ARMED
+   With single-key shortcuts off (the ? sheet), only the footer button and Esc work.                       */
 (function () {
   'use strict';
   var RM = window.matchMedia ? matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
@@ -12,6 +13,8 @@
   var GLYPHS = '░▒▓█⦑⦒/\\13470$#';
 
   function $(s) { return document.querySelector(s); }
+  /* the key sheet's "Single-key shortcuts" switch (WCAG 2.1.4) turns the typed eggs and ` off too */
+  function keysOn() { try { return localStorage.getItem('v3r1t4s-keys') !== 'off'; } catch (e) { return true; } }
   function editable(t) { return t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable); }
   var live = document.createElement('p');
   live.className = 'sr-only'; live.id = 'egg-live'; live.setAttribute('aria-live', 'polite');
@@ -146,6 +149,7 @@
       return;
     }
     if (ev.ctrlKey || ev.metaKey || ev.altKey || ev.repeat || editable(ev.target) || document.querySelector('dialog[open]')) return;
+    if (!keysOn()) { buf = ''; ki = 0; return; }
     var k = ev.key;
     if (k === KONAMI[ki] || (k && k.toLowerCase() === KONAMI[ki])) ki++;
     else ki = k === 'ArrowUp' ? (ki === 2 ? 2 : 1) : 0;
