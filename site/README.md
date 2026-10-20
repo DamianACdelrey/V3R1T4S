@@ -5,8 +5,8 @@ No server code, no database, no cookies, no analytics, no third-party requests, 
 
 ```
 site/build.py     reads the checkout, writes site/public/ (standard-library Python 3.8+, no pip, no npm)
-site/src/         page templates (index.html, 404.html), app.js, theme.js, style.css, fonts/ (with their OFL
-                  licences), _headers (CSP), favicon, og.png
+site/src/         page templates (index.html, 404.html), app.js (the page), eggs.js and term.js (easter eggs),
+                  404.js, theme.js, style.css, fonts/ (with their OFL licences), _headers (CSP), favicon, og.png
 site/serve.py     local preview that applies _headers and serves 404.html, so it behaves as on Cloudflare
 site/public/      build output (git-ignored)
 wrangler.jsonc    (repository root) tells Cloudflare to serve site/public/ as static assets
@@ -74,7 +74,26 @@ project's Custom domains tab. Pages honours `_headers` and `404.html` the same w
 | Known unknowns | all of `bank/targets.json`, with category chips (`bank/categories.json`, emoji from the README table) and a search box. Each links to its `known-unknowns/<category>/<id>.md` page. |
 
 Machine-readable: `/data.json` (everything above), `/feed.xml` (Atom: the newest 30 discoveries and every weekly
-edition), `/sitemap.xml`, `/robots.txt`.
+edition), `/known-unknowns.txt` (every target, tab-separated, for agents), `/sitemap.xml`, `/robots.txt`.
+
+**Without JavaScript** the page still works: `build.py` renders the weekly card, the first 12 discoveries, the
+leaderboard and the first 24 known unknowns into `index.html` (escaped, same markup and ids as `app.js`), and
+`app.js` replaces them with the interactive lists. If `data.json` cannot load, the snapshot stays.
+
+### Using the page
+
+- **Links to one thing:** `#u-<target id>` (a known unknown), `#d-<package folder>` (a discovery), `#w-<date>`
+  (a weekly edition). The `#` on each row opens and copies its link.
+- **Filters live in the URL:** `?q=<search>&cat=<category>&kind=harvest|standard|moonshot&cp=min|hours|days|cluster|thought&by=<credit>`.
+  Back and Forward walk through filter changes; picking a name on the leaderboard filters the discoveries.
+- **Hunt** on a known unknown copies `set up V3R1T4S: https://github.com/elder-plinius/V3R1T4S and hunt
+  known-unknowns/<category>/<id>.md` (AGENTS.md makes a named problem the first quarry). **Roll** jumps to a random
+  target from the current filters.
+- **Keys:** `/` search, `↓ ↑` walk results, `Esc` clear, `g` then `w d b u` jump to a section, `c` copy the join
+  command, `Shift+R` roll, `` ` `` terminal, `?` the key sheet (which can switch single-key shortcuts off).
+- **Easter eggs** (decoration only; they never change data, numbers or the join command, and `Esc` ends them):
+  type `liberate` or the Konami code, type `pliny`, open the terminal and try `sudo liberate`, copy the join command,
+  or visit any missing page. Remove the `eggs.js` script tag and the page works the same without them.
 
 **Merge dates.** The merge day of a package is the day of the oldest commit that added its folder (preferring a
 squash-merge commit, whose subject ends in `(#NNN)`). If the build checkout is shallow, the build runs
@@ -141,4 +160,7 @@ followed.
 - Folder and target names that do not match strict patterns, and package folders whose date is not a real day or
   is in the future, are skipped with a warning in the build log. Malformed bank JSON is skipped the same way;
   the build still produces a page.
-- `localStorage` holds only the viewer's theme choice. The page sets no cookies and makes no third-party requests.
+- `localStorage` holds only the viewer's theme choice (`v3r1t4s-theme`) and the single-key shortcut switch
+  (`v3r1t4s-keys`), read and written inside `try`. The page sets no cookies and makes no third-party requests.
+- No inline script or style (the CSP forbids both): leaderboard bar widths are pre-baked classes, and the terminal
+  is a same-origin script loaded on first use. Its commands only call the page's own validated functions.

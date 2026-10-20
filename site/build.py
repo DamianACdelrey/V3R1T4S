@@ -28,7 +28,8 @@ Repository content is untrusted input (contributors write package READMEs, INDEX
     formula such as =HYPERLINK(...) is never shown); the page never exports CSV;
   - data.json carries ids and relative repo paths, never URLs: app.js builds every link from fixed
     github.com/elder-plinius/V3R1T4S prefixes and re-checks the ids, and renders text with textContent only;
-  - HTML and XML written here (index.html, 404.html, feed.xml, sitemap.xml) escape every value.
+  - HTML and XML written here (index.html with its no-JS snapshot, 404.html, feed.xml, sitemap.xml) escape every
+    value; known-unknowns.txt strips tabs and newlines from every field.
 """
 import argparse
 import csv
@@ -743,6 +744,11 @@ def render_template(name, data, site_url):
         "COMMIT_LINK": (' · <a id="commit" href="%s/commit/%s">%s</a>' % (GH, esc(commit), esc(commit[:7]))
                         if re.match(r"^[0-9a-f]{7,40}\Z", commit) else ""),
         "YEAR": esc(data["built"][:4]),
+        # server-rendered snapshot: already escaped HTML (see ssr_*)
+        "NEWS_HTML": ssr_news(data["news"]),
+        "FEED_HTML": ssr_feed(data["feed"]),
+        "BOARD_HTML": ssr_board(data["board"]),
+        "KU_HTML": ssr_ku(data),
     }
     unknown = sorted(set(re.findall(r"\{\{([A-Z_]+)\}\}", tpl)) - set(subs))
     if unknown:
@@ -752,6 +758,172 @@ def render_template(name, data, site_url):
     if "{{" in out:
         sys.exit("site/src/%s: malformed placeholder" % name)
     return out
+
+
+# ------------------------------------------------------------------ server-rendered snapshot (no-JS fallback)
+# The same markup, classes and ids as app.js renders (feedItem, boardRow, kuItem, the weekly card), so deep links
+# (#d-<package>, #u-<target>, #w-<date>) work natively before or without JavaScript; app.js replaces the lists.
+# Every value is escaped with esc(); every href is a fixed prefix plus ids that pass the same patterns as app.js.
+SSR_FEED = 12
+SSR_KU = 24
+RE_CREDIT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}\Z")
+RE_DAY = re.compile(r"^(\d{4})-(\d{2})-(\d{2})\Z")
+RE_NEWS_LINK = re.compile(
+    r"^(known-knowns/[a-z0-9][a-z0-9-]{0,99}(/\d{4}-\d{2}-\d{2}-[A-Za-z0-9][A-Za-z0-9_.-]{0,63}-[0-9a-f]{8}"
+    r"(/README\.md)?)?|known-unknowns/[a-z0-9][a-z0-9-]{0,99}(/(README|[a-z0-9][a-z0-9-]{0,99})\.md)?)\Z")
+MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+STATUS = {"o": ("✅", "Listed by the table owner"), "v": ("🧪", "Verified by us, not yet listed by the table owner")}
+
+
+def trunc(s, n):
+    """app.js str(): at most n characters, with an ellipsis."""
+    s = str(s)
+    return s if len(s) <= n else s[: n - 1] + "…"
+
+
+def day_label(d, year=True):
+    m = RE_DAY.match(d or "")
+    if not m or not 1 <= int(m.group(2)) <= 12:
+        return d
+    s = "%s %d" % (MONTHS[int(m.group(2)) - 1], int(m.group(3)))
+    return s + ", " + m.group(1) if year else s
+
+
+def range_label(a, b):
+    """'Oct 13 → Oct 19, 2026' (app.js rangeLabel)."""
+    return "%s → %s" % (day_label(a, a[:4] != b[:4]), day_label(b))
+
+
+def width_class(n, mx):
+    return "w%d" % max(5, min(100, int(math.floor(20.0 * n / max(mx, 1) + 0.5)) * 5))
+
+
+def ssr_feed_item(x):
+    ok = bool(RE_SLUG.match(x["f"]) and RE_PKG.match(x["k"]))
+    t = esc(trunc(x["t"], 140))
+    title = ('<a class="t" href="%s/tree/main/known-knowns/%s/%s">%s</a>' % (GH, esc(x["f"]), esc(x["k"]), t)
+             if ok else '<span class="t">%s</span>' % t)
+    mk = STATUS.get(x["s"], STATUS["v"])
+    meta = ['<span class="badge st%s" role="img" aria-label="%s" title="%s">%s</span>'
+            % (" o" if x["s"] == "o" else "", mk[1], mk[1], mk[0])]
+    if x["m"]:
+        meta.append('<span class="badge mg">%s</span>' % esc(trunc(x["m"], 60)))
+    if RE_CREDIT.match(x["c"]):
+        meta.append('<span class="cr">by %s</span>' % esc(x["c"]))
+    if ok:
+        meta.append('<a class="pl" href="#d-%s" aria-label="Link to: %s">#</a>' % (esc(x["k"]), esc(trunc(x["t"], 60))))
+    return ('<li class="it"%s><span class="e" aria-hidden="true">%s</span><div class="b">%s<div class="meta">%s</div>'
+            "</div></li>" % (' id="d-%s"' % esc(x["k"]) if RE_PKG.match(x["k"]) else "",
+                             esc(emoji_ok(x["e"]) or "◆"), title, "".join(meta)))
+
+
+def ssr_feed(feed):
+    per_day = {}
+    for x in feed:
+        per_day[x["d"]] = per_day.get(x["d"], 0) + 1
+    out, last = [], None
+    for x in feed[:SSR_FEED]:
+        if x["d"] != last:
+            if last is not None:
+                out.append("</ol></section>")
+            last = x["d"]
+            out.append('<section class="day"><div class="day-h"><h3><time datetime="%s" title="Merged %s (UTC)">%s'
+                       '</time></h3><span class="day-n" aria-hidden="true">%s</span></div><ol>'
+                       % (esc(x["d"]), esc(day_label(x["d"])), esc(day_label(x["d"])), fmt(per_day[x["d"]])))
+        out.append(ssr_feed_item(x))
+    if last is not None:
+        out.append("</ol></section>")
+    return "".join(out) or '<p class="empty panel">Nothing merged yet.</p>'
+
+
+def ssr_board(board):
+    rows = [r for r in board[:10] if RE_CREDIT.match(r["c"]) and isinstance(r["n"], int) and r["n"] >= 0]
+    mx = max([1] + [r["n"] for r in rows])
+    out = []
+    for i, r in enumerate(rows):
+        cls = ["top1" if i == 0 else "top3" if i < 3 else "", width_class(r["n"], mx), "x" if i >= 5 else ""]
+        out.append('<li class="%s"><span class="r">%d</span><span class="n" title="%s">%s</span>'
+                   '<span class="c">%s<span class="sr-only"> packages</span></span></li>'
+                   % (" ".join(c for c in cls if c), i + 1, esc(r["c"]), esc(r["c"]), fmt(r["n"])))
+    return "".join(out) or '<li class="empty">No merged results yet.</li>'
+
+
+def ssr_ku(data):
+    cats = {c["id"]: c for c in data["cats"]}
+    out = []
+    for k in data["ku"]:
+        if len(out) >= SSR_KU:
+            break
+        c = cats.get(k["cat"])
+        if not c or not RE_SLUG.match(k["id"]) or not RE_SLUG.match(k["cat"]):
+            continue
+        meta = ['<span class="cat">%s</span>' % esc(c["name"])]
+        if k["k"] and re.match(r"^[a-z]{1,12}\Z", k["k"]):  # app.js KIND
+            meta.append('<span class="badge%s">%s</span>' % (" kd-moonshot" if k["k"] == "moonshot" else "", esc(k["k"])))
+        if k["cp"]:
+            meta.append('<span class="badge">%s</span>' % esc(trunc(k["cp"], 24)))
+        out.append('<li id="u-%s"><span class="e" aria-hidden="true">%s</span><div class="b"><a class="kt" '
+                   'href="%s/blob/main/known-unknowns/%s/%s.md">%s</a><div class="meta">%s</div></div>'
+                   '<div class="acts"><a class="pl" href="#u-%s" aria-label="Link to: %s">#</a></div></li>'
+                   % (esc(k["id"]), esc(emoji_ok(c["e"]) or "◆"), GH, esc(k["cat"]), esc(k["id"]),
+                      esc(trunc(k["t"], 180)), "".join(meta), esc(k["id"]), esc(trunc(k["t"], 60))))
+    out.append('<li class="more-static"><a href="known-unknowns.txt">All %s as plain text</a> · '
+               '<a href="%s/tree/main/known-unknowns">on GitHub</a></li>' % (fmt(len(data["ku"])), GH))
+    return "".join(out)
+
+
+def ssr_edition_body(n):
+    paras = "".join("<p>%s</p>" % esc(p) for p in n["paras"])
+    bullets = []
+    for b in n["bullets"]:
+        p = b.get("path")
+        if isinstance(p, str) and RE_NEWS_LINK.match(p):
+            bullets.append('<li><a href="%s/tree/main/%s">%s</a></li>' % (GH, esc(p), esc(b["t"])))
+        else:
+            bullets.append("<li><span>%s</span></li>" % esc(b["t"]))
+    return '<div class="ed-body"><div class="ed-p">%s</div>%s</div>' % (
+        paras, '<ul class="ed-b">%s</ul>' % "".join(bullets) if bullets else "")
+
+
+def ssr_news(news):
+    """The V3R1T4S Weekly card (latest edition) and its archive, or nothing when there is no edition."""
+    eds = [n for n in news if RE_DAY.match(n["id"]) and RE_DAY.match(n["from"]) and RE_DAY.match(n["to"])]
+    if not eds:
+        return ""
+    top, older = eds[0], eds[1:]
+    i = esc(top["id"])
+    out = ['<section class="wrap weekly-sec" id="weekly" aria-labelledby="wk-h"><div class="weekly panel">'
+           '<div class="wk-head"><h2 id="wk-h" class="h2"><span class="h2-mark" aria-hidden="true">//</span>'
+           '<span aria-hidden="true">V3R1T4S W33KLY</span><span class="sr-only">V3R1T4S Weekly</span></h2>'
+           '<a class="wk-feed" href="feed.xml" data-leet>Atom feed</a></div>',
+           '<article class="ed" id="w-%s" aria-labelledby="w-%s-h"><h3 class="ed-h" id="w-%s-h">'
+           '<time datetime="%s">%s</time> <a class="pl" href="#w-%s" aria-label="Link to this edition">#</a></h3>%s'
+           "</article>" % (i, i, i, esc(top["to"]), esc(range_label(top["from"], top["to"])), i,
+                           ssr_edition_body(top))]
+    if older:
+        out.append('<details class="wk-arch" id="wk-arch"><summary>Earlier editions <span class="k">%s</span>'
+                   '</summary><div class="arch">' % fmt(len(older)))
+        for n in older:
+            out.append('<details class="ed old" id="w-%s"><summary><time datetime="%s">%s</time></summary>%s</details>'
+                       % (esc(n["id"]), esc(n["to"]), esc(range_label(n["from"], n["to"])), ssr_edition_body(n)))
+        out.append("</div></details>")
+    out.append("</div></section>")
+    return "".join(out)
+
+
+def ku_text(data, site_url):
+    """known-unknowns.txt: every target as one tab-separated line, for agents and no-JS readers."""
+    cats = {c["id"]: c["name"] for c in data["cats"]}
+    lines = ["# V3R1T4S known unknowns: %d open problems, built %s from %s. Tab-separated: id, category, kind, "
+             "compute, path, title. Pages: %s/blob/main/<path>" % (len(data["ku"]), data["built"], site_url, GH),
+             "id\tcategory\tkind\tcompute\tpath\ttitle"]
+    for k in data["ku"]:
+        if not (RE_SLUG.match(k["id"]) and RE_SLUG.match(k["cat"])):
+            continue
+        row = [k["id"], cats.get(k["cat"], k["cat"]), k["k"] or "", k["cp"] or "",
+               "known-unknowns/%s/%s.md" % (k["cat"], k["id"]), k["t"]]
+        lines.append("\t".join(re.sub(r"[\t\r\n]+", " ", str(v)) for v in row))
+    return "\n".join(lines) + "\n"
 
 
 def atom_feed(data, site_url):
@@ -834,6 +1006,7 @@ def main():
     with open(os.path.join(out, "data.json"), "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=True, separators=(",", ":"))
     write(out, "feed.xml", atom_feed(data, site_url))
+    write(out, "known-unknowns.txt", ku_text(data, site_url))
     write(out, "sitemap.xml",
           '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
           "<url><loc>%s/</loc><lastmod>%s</lastmod></url></urlset>\n" % (esc(site_url), esc(data["built"][:10])))

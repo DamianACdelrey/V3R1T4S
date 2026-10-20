@@ -23,3 +23,7 @@
 
 /fonts/*
   Cache-Control: public, max-age=2592000
+
+/known-unknowns.txt
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
