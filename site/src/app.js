@@ -15,11 +15,15 @@
   var SAFE_URL = /^https:\/\/github\.com\/elder-plinius\/V3R1T4S\/[A-Za-z0-9._~\/?=&%-]*$/;
   var H_U = /^#u-([a-z0-9][a-z0-9-]{0,99})$/, H_D = new RegExp('^#d-(' + PKG_SRC + ')$'), H_W = /^#w-(\d{4}-\d{2}-\d{2})$/;
   var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  var MARK = Object.assign(Object.create(null), { o: ['✅', 'Listed by the table owner'], v: ['🧪', 'Verified by us, not yet listed by the table owner'] });
-  var CB = [['min', 'laptop-minutes'], ['hours', 'laptop-hours'], ['days', 'laptop-days'], ['cluster', 'cluster'], ['thought', 'pure thought']];
+  var MARK = Object.assign(Object.create(null), { o: ['✅', "Officially listed: the table's owner has added it"], v: ['🧪', 'Checked by us, not yet on the official table'] });
+  /* display labels only: URL values (cp=min, kind=harvest) and data.json keep the raw words (build.py CB_LABEL, KIND_LABEL) */
+  var CB = [['min', 'minutes on a laptop'], ['hours', 'hours on a laptop'], ['days', 'days on a laptop'], ['cluster', 'needs a cluster'], ['thought', 'pen and paper']];
   /* lookup tables keyed by repo or URL strings have no prototype, so 'constructor' or '__proto__' never match */
   function dict() { return Object.create(null); }
   var CB_LABEL = dict(); CB.forEach(function (c) { CB_LABEL[c[0]] = c[1]; });
+  var KIND_L = Object.assign(dict(), { harvest: 'within reach' });
+  function kindLabel(k) { return KIND_L[k] || k; }
+  var PLAIN_MAX = 110;
   var FEED_STEP = 12;
   var KU_STEP = window.matchMedia && matchMedia('(min-width: 960px)').matches ? 24 : 12;
   var SUGGEST = GH + '/issues/new?template=suggest-known-unknown.yml';
@@ -100,12 +104,13 @@
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { done(true); }, function () { done(false); });
     else done(false);
   }
-  function copyJoin(btn) { copyText(JOIN, btn || $('#copy'), null, 'Join command copied', 'join'); }
+  function copyJoin(btn) { copyText(JOIN, btn || $('#copy'), null, 'Setup line copied', 'join'); }
 
   /* ---------------- state */
   var feed = [], feedShown = FEED_STEP, feedBy = null, feedView = [];
   var ku = [], kuById = dict(), cats = dict(), catList = [], kinds = [], kuHits = [], kuShown = KU_STEP;
   var kuCat = null, kuKind = null, kuCp = null, words = [], lastRoll = null, loaded = false;
+  var famPlain = dict(), catPlain = dict();
 
   function qv() { return str($('#q').value.trim(), 100); }
 
@@ -151,22 +156,25 @@
     var a = el('a', 'pl', '#');
     a.href = hash;
     a.setAttribute('aria-label', 'Link to: ' + str(title, 60));
+    a.title = 'Copy a link to this';
     return a;
   }
 
-  function feedItem(x) {
+  /* blurb: the family's plain-English line, shown on the first item of a run of one family (renderFeed) */
+  function feedItem(x, blurb) {
     var li = el('li', 'it');
     if (PKG.test(x.k)) li.id = 'd-' + x.k;
     var e = el('span', 'e', emoji(x.e)); e.setAttribute('aria-hidden', 'true');
     var b = el('div', 'b');
     var ok = SLUG.test(x.f) && PKG.test(x.k);
     b.appendChild(ok ? link(GH + '/tree/main/known-knowns/' + x.f + '/' + x.k, 't', str(x.t, 140)) : el('span', 't', str(x.t, 140)));
+    if (blurb) b.appendChild(el('p', 'fam', blurb));
     var meta = el('div', 'meta');
     var mk = MARK[x.s] || MARK.v;
     var st = el('span', 'badge st' + (x.s === 'o' ? ' o' : ''), mk[0]);
     st.setAttribute('role', 'img'); st.setAttribute('aria-label', mk[1]); st.title = mk[1];
     meta.appendChild(st);
-    if (x.m) meta.appendChild(el('span', 'badge mg', str(x.m, 60)));
+    if (x.m) { var mg = el('span', 'badge mg', str(x.m, 60)); mg.title = 'The new value and the previous best'; meta.appendChild(mg); }
     if (CREDIT.test(x.c)) meta.appendChild(el('span', 'cr', 'by ' + x.c));
     if (ok) meta.appendChild(permalink('#d-' + x.k, x.t));
     b.appendChild(meta);
@@ -183,33 +191,34 @@
     if (feedBy) {
       by.appendChild(document.createTextNode('Showing ' + fmt(feedView.length) + ' discover' + (feedView.length === 1 ? 'y' : 'ies') + ' by '));
       by.appendChild(el('b', null, feedBy));
-      var x = el('button', 'x', '✕'); x.type = 'button'; x.setAttribute('aria-label', 'Clear contributor filter');
+      var x = el('button', 'x', '✕'); x.type = 'button'; x.setAttribute('aria-label', 'Show everyone');
       x.addEventListener('click', function () { setBy(null); });
       by.appendChild(x);
     }
     if (!feedView.length) {
-      var p = el('p', 'empty panel', 'Nothing merged yet. Be the first: ');
-      var c = el('button', 'mini', 'Copy join'); c.type = 'button';
+      var p = el('p', 'empty panel', 'No discoveries yet. Be the first: ');
+      var c = el('button', 'mini', 'Copy line'); c.type = 'button';
       c.addEventListener('click', function () { copyJoin(c); });
       p.appendChild(c); box.appendChild(p);
     }
-    var group = null, last = null, perDay = dict();
+    var group = null, last = null, lastF = null, perDay = dict();
     feedView.forEach(function (x) { perDay[x.d] = (perDay[x.d] || 0) + 1; });
     feedView.slice(0, feedShown).forEach(function (x) {
       if (x.d !== last) {
-        last = x.d;
+        last = x.d; lastF = null;
         var sec = el('section', 'day');
         var head = el('div', 'day-h');
         var h3 = el('h3');
         var t = el('time', null, relDay(x.d));
-        t.setAttribute('datetime', x.d); t.title = 'Merged ' + dayLabel(x.d) + ' (UTC)';
+        t.setAttribute('datetime', x.d); t.title = 'Added ' + dayLabel(x.d) + ' (UTC)';
         h3.appendChild(t); head.appendChild(h3);
         var n = el('span', 'day-n', fmt(perDay[x.d])); n.setAttribute('aria-hidden', 'true');
         head.appendChild(n);
         sec.appendChild(head);
         group = el('ol'); sec.appendChild(group); box.appendChild(sec);
       }
-      group.appendChild(feedItem(x));
+      group.appendChild(feedItem(x, x.f !== lastF ? famPlain[x.f] : null));
+      lastF = x.f;
     });
     var more = $('#feed-more'), left = feedView.length - feedShown;
     more.hidden = left <= 0;
@@ -241,17 +250,17 @@
       if (i >= 5) li.classList.add('x');
       li.appendChild(el('span', 'r', String(i + 1)));
       var has = feed.some(function (x) { return x.c === r.c; });
-      var n = el(has ? 'button' : 'span', 'n', r.c); n.title = r.c;
+      var n = el(has ? 'button' : 'span', 'n', r.c); n.title = has ? 'Show ' + r.c + "'s discoveries" : r.c;
       if (has) {
         n.type = 'button'; n.setAttribute('data-c', r.c); n.setAttribute('aria-pressed', 'false');
         n.addEventListener('click', function () { setBy(feedBy === r.c ? null : r.c); });
       }
       li.appendChild(n);
-      var c = el('span', 'c', fmt(r.n)); c.appendChild(el('span', 'sr-only', ' packages'));
+      var c = el('span', 'c', fmt(r.n)); c.appendChild(el('span', 'sr-only', r.n === 1 ? ' result' : ' results'));
       li.appendChild(c);
       bo.appendChild(li);
     });
-    if (!rows.length) bo.appendChild(el('li', 'empty', 'No merged results yet.'));
+    if (!rows.length) bo.appendChild(el('li', 'empty', 'No one on the board yet. Be the first.'));
     /* below 1024px the board sits above the feed, so it starts at the top 5 */
     var k = rows.length, bm = $('#board-more');
     bm.hidden = k <= 5;
@@ -314,9 +323,11 @@
     a.appendChild(words.length ? hl(k.t, words) : document.createTextNode(k.t));
     b.appendChild(a);
     var meta = el('div', 'meta');
-    meta.appendChild(el('span', 'cat', c.name || k.cat));
-    if (k.k) meta.appendChild(el('span', 'badge' + (k.k === 'moonshot' ? ' kd-moonshot' : ''), k.k));
-    if (k.cp) meta.appendChild(el('span', 'badge', k.cp));
+    var cs = el('span', 'cat', c.name || k.cat);
+    if (catPlain[k.cat]) cs.title = catPlain[k.cat];
+    meta.appendChild(cs);
+    if (k.k) meta.appendChild(el('span', 'badge' + (k.k === 'moonshot' ? ' kd-moonshot' : ''), kindLabel(k.k)));
+    if (k.cp) meta.appendChild(el('span', 'badge', k.cb ? CB_LABEL[k.cb] : k.cp));
     if (words.length) {
       var t = k.t.toLowerCase();
       if (words.some(function (w) { return t.indexOf(w) === -1 && k.id.indexOf(w) !== -1; })) {
@@ -328,8 +339,8 @@
     acts.appendChild(permalink('#u-' + k.id, k.t));
     var h = el('button', 'hunt'); h.type = 'button';
     h.setAttribute('data-i', String(idx));
-    h.setAttribute('aria-label', 'Hunt: copy an agent prompt for ' + str(k.t, 60));
-    h.title = 'Copy an agent prompt that hunts this one';
+    h.setAttribute('aria-label', 'Hunt: copy a prompt that sends your agent after ' + str(k.t, 60));
+    h.title = 'Copy a prompt that sends your agent after this problem';
     h.appendChild(el('span', 'lab', 'Hunt'));
     acts.appendChild(h);
     li.appendChild(e); li.appendChild(b); li.appendChild(acts);
@@ -348,7 +359,7 @@
     cnt.classList.toggle('f', !all);
     var r = $('#roll');
     r.disabled = !kuHits.length;
-    r.title = kuHits.length ? 'Roll a random open problem (Shift+R)' : 'Nothing to roll: clear the filters';
+    r.title = kuHits.length ? 'Show a random open problem (Shift+R)' : 'Nothing to pick from: clear the filters';
   }
 
   /* M9: a zero-result state that offers the next step */
@@ -364,10 +375,10 @@
     var filtered = kuCat || kuKind || kuCp;
     if (q && filtered) {
       var n = ku.filter(matchQ).length;
-      if (n) { var a = el('button', 'mini', 'Search everything (' + fmt(n) + ')'); a.type = 'button'; a.setAttribute('data-act', 'all'); row.appendChild(a); }
+      if (n) { var a = el('button', 'mini', 'Search all categories (' + fmt(n) + ')'); a.type = 'button'; a.setAttribute('data-act', 'all'); row.appendChild(a); }
     }
     if (q || filtered) { var c = el('button', 'mini', 'Clear filters'); c.type = 'button'; c.setAttribute('data-act', 'clear'); row.appendChild(c); }
-    row.appendChild(link(SUGGEST + (q ? '&title=' + enc(q.slice(0, 80)) : ''), 'mini sug', q ? 'Suggest it as a known unknown →' : 'Suggest a known unknown →'));
+    row.appendChild(link(SUGGEST + (q ? '&title=' + enc(q.slice(0, 80)) : ''), 'mini sug', q ? 'Suggest it as a new problem →' : 'Suggest a problem →'));
     li.appendChild(row);
     return li;
   }
@@ -384,6 +395,10 @@
     pressGroup('#chips .chip', 'data-cat', kuCat);
     pressGroup('#eff-kind .chip', 'data-kind', kuKind);
     pressGroup('#eff-cp .chip', 'data-cp', kuCp);
+    /* the selected category's plain-English line, under the chips */
+    var cp = $('#cat-p'), t = kuCat && catPlain[kuCat];
+    if (cp && cp.textContent !== (t || '')) cp.textContent = t || '';
+    if (cp) cp.hidden = !t;
   }
   function chip(label, n, attr, val, onClick, cls) {
     var b = el('button', 'chip' + (cls ? ' ' + cls : ''));
@@ -404,10 +419,12 @@
     var box = $('#chips'); box.textContent = '';
     box.appendChild(chip('All', ku.length, 'data-cat', null, function () { setFilter('cat', null); }));
     catList.forEach(function (c) {
-      box.appendChild(chip(c.e + ' ' + c.name, c.n, 'data-cat', c.id, function () { setFilter('cat', c.id); }));
+      var b = chip(c.e + ' ' + c.name, c.n, 'data-cat', c.id, function () { setFilter('cat', c.id); });
+      if (catPlain[c.id]) b.title = catPlain[c.id];
+      box.appendChild(b);
     });
     var kb = $('#eff-kind'), cb = $('#eff-cp'); kb.textContent = ''; cb.textContent = '';
-    kinds.forEach(function (k) { kb.appendChild(chip(k, 0, 'data-kind', k, function () { setFilter('kind', k); }, 'sm')); });
+    kinds.forEach(function (k) { kb.appendChild(chip(kindLabel(k), 0, 'data-kind', k, function () { setFilter('kind', k); }, 'sm')); });
     CB.forEach(function (c) {
       if (ku.some(function (k) { return k.cb === c[0]; })) cb.appendChild(chip(c[1], 0, 'data-cp', c[0], function () { setFilter('cp', c[0]); }, 'sm'));
     });
@@ -463,10 +480,10 @@
   }
   function missing() {
     var ul = $('#kul'), li = el('li', 'empty note');
-    li.appendChild(document.createTextNode('That target is not in this build. It may have been renamed or solved. '));
+    li.appendChild(document.createTextNode("That problem isn't on the list any more. It may have been renamed or retired. "));
     li.appendChild(link(GH + '/tree/main/known-unknowns', null, 'Browse on GitHub →'));
     ul.insertBefore(li, ul.firstChild);
-    $('#ku-live').textContent = 'That target is not in this build.';
+    $('#ku-live').textContent = "That problem isn't on the list any more.";
     flash(li);
   }
   function go(hash) {
@@ -483,13 +500,13 @@
     var r = $('#roll');
     if (!RM.matches) { r.classList.remove('spin'); void r.offsetWidth; r.classList.add('spin'); }
     go('#u-' + k.id);
-    say('#ku-live', 'Rolled: ' + str(k.t, 60));
+    say('#ku-live', 'Picked: ' + str(k.t, 60));
     return k;
   }
   function hunt(k, btn) {
     if (!k || !SLUG.test(k.id) || !SLUG.test(k.cat)) return false;
     var text = JOIN + ' and hunt known-unknowns/' + k.cat + '/' + k.id + '.md';
-    if (btn) copyText(text, btn, 'Copied ✓', 'Agent prompt copied for ' + str(k.t, 60), 'hunt');
+    if (btn) copyText(text, btn, 'Copied ✓', 'Prompt copied for ' + str(k.t, 60), 'hunt');
     return text;
   }
 
@@ -533,7 +550,7 @@
     }).slice(0, 20000).map(function (k) {
       var o = { id: k.id, cat: k.cat, t: str(k.t, 180), k: typeof k.k === 'string' && KIND.test(k.k) ? k.k : null,
                 cp: k.cp ? str(k.cp, 24) : null, cb: CB_LABEL[k.cb] ? k.cb : null };
-      o._hay = [o.t, o.id, cats[k.cat].name, o.k || '', o.cp || '', o.cb ? CB_LABEL[o.cb] : ''].join(' ').toLowerCase();
+      o._hay = [o.t, o.id, cats[k.cat].name, o.k || '', o.k ? kindLabel(o.k) : '', o.cp || '', o.cb ? CB_LABEL[o.cb] : ''].join(' ').toLowerCase();
       kuById[o.id] = o;
       return o;
     });
@@ -541,6 +558,15 @@
       if (k && kinds.indexOf(k) === -1 && ku.some(function (x) { return x.k === k; })) kinds.push(k);
     });
     catList.sort(function (a, b) { return b.n - a.n || (a.name < b.name ? -1 : 1); });
+    /* plain-English blurbs: {f: {family: text}, c: {category: text}}; ids re-checked, text capped, shown as text */
+    var P = D.plain && typeof D.plain === 'object' ? D.plain : {};
+    [[P.f, famPlain], [P.c, catPlain]].forEach(function (pair) {
+      var src = pair[0], dst = pair[1];
+      if (!src || typeof src !== 'object' || Array.isArray(src)) return;
+      Object.keys(src).slice(0, 2000).forEach(function (id) {
+        if (SLUG.test(id) && typeof src[id] === 'string' && src[id]) dst[id] = str(src[id], PLAIN_MAX);
+      });
+    });
 
     readState();
     var st = history.state || {}, ok = typeof st.y === 'number';
@@ -565,7 +591,7 @@
   /* S1: keep the server-rendered snapshot when data.json cannot be loaded */
   function fail() {
     var box = $('#feed');
-    var p = el('p', 'empty panel err', box.querySelector('.it') ? 'Live list unavailable; showing the build snapshot. ' : 'Could not load the list. ');
+    var p = el('p', 'empty panel err', box.querySelector('.it') ? "Couldn't load the latest list, so this is a saved copy. " : "Couldn't load the list. ");
     p.appendChild(link(GH + '/tree/main/known-knowns', null, 'Browse it on GitHub →'));
     box.insertBefore(p, box.firstChild);
   }

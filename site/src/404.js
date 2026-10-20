@@ -1,4 +1,4 @@
-/* 404 page: copy the join command, and decode "This page is a known unknown." once (static under reduced motion). */
+/* 404 page: copy the setup line, and decode "This page is a known unknown." once (static under reduced motion). */
 (function () {
   'use strict';
   var RM = window.matchMedia ? matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
@@ -11,7 +11,7 @@
       function done(ok) {
         clearTimeout(t);
         btn.textContent = ok ? '✓ ARMED' : 'Select';
-        live.textContent = ok ? 'Join command copied' : 'Press Ctrl+C to copy';
+        live.textContent = ok ? 'Setup line copied' : 'Press Ctrl+C to copy';
         if (!ok) { var s = window.getSelection(), r = document.createRange(); r.selectNodeContents(cmd); s.removeAllRanges(); s.addRange(r); }
         t = setTimeout(function () { btn.textContent = 'Copy'; live.textContent = ''; }, 1800);
       }

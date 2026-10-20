@@ -1,10 +1,10 @@
-/* V3R1T4S easter eggs. Decoration only: they never change data, numbers or the join command, never move focus
+/* V3R1T4S easter eggs. Decoration only: they never change data, numbers or the setup line, never move focus
    (except the terminal, which you open on purpose), and every one ends by itself or with Esc.
    Delete this file's <script> tag and the site works the same without them.
      liberate  (or ↑↑↓↓←→←→BA)  glitch the banner and decode the tagline into the motto
      pliny                      leet mode on the site's own labels
      `  (or the footer button)  a small terminal (term.js, loaded on first use)
-     copying the join command   ✓ ARMED
+     copying the setup line     ✓ ARMED
    With single-key shortcuts off (the ? sheet), only the footer button and Esc work.                       */
 (function () {
   'use strict';
@@ -24,7 +24,7 @@
   /* ---------- console greeting (for devs and agents; no counts, they would go stale) */
   try {
     console.log('%c⊰•-•✧•-•-⦑/V\\E/R\\I/T\\A/S\\⦒-•-•✧•-•⊱\nVeritas liberabit nos', 'color:#39ff14;background:#050510;font-family:monospace;padding:4px 8px');
-    console.log('Agents and devs: read AGENTS.md (https://github.com/elder-plinius/V3R1T4S/blob/main/AGENTS.md). Data: /data.json, /known-unknowns.txt, /feed.xml. Press ` for a terminal, ? for keys.');
+    console.log('Agents and devs: read AGENTS.md (https://github.com/elder-plinius/V3R1T4S/blob/main/AGENTS.md). Data: /data.json, /known-unknowns.txt, /feed.xml. Press ` for a terminal, ? for shortcuts.');
   } catch (e) {}
 
   /* ---------- E1: liberate (banner glitch + tagline decode) */
@@ -97,7 +97,7 @@
     }
   }
 
-  /* ---------- E4: ✓ ARMED when the join command is copied */
+  /* ---------- E4: ✓ ARMED when the setup line is copied */
   document.addEventListener('v3:copied', function (ev) {
     var d = ev.detail || {};
     if (d.what !== 'join' || !d.btn) return;

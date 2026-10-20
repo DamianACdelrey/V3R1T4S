@@ -25,12 +25,12 @@
     ['help', 'list commands'],
     ['ls', 'sections, with counts'],
     ['cd weekly|feed|board|ku', 'jump to a section'],
-    ['ls ku [category]', 'filter by category (no category: all)'],
-    ['grep <words>', 'search the known unknowns'],
-    ['open <id>', 'jump to a known unknown (Tab completes)'],
-    ['roll', 'roll a random open problem'],
-    ['hunt <id>', 'copy an agent prompt for that target'],
-    ['copy', 'copy the join command'],
+    ['ls ku [category]', 'filter open problems by category'],
+    ['grep <words>', 'search the open problems'],
+    ['open <id>', 'jump to an open problem (Tab completes)'],
+    ['roll', 'show a random open problem'],
+    ['hunt <id>', 'copy a prompt that sends your agent after it'],
+    ['copy', 'copy the setup line'],
     ['cat motto|agents', 'the motto, or where agents start'],
     ['whoami', 'who you are here'],
     ['theme', 'toggle light/dark'],
@@ -56,13 +56,13 @@
       line('weekly/   ' + c.weekly + ' edition' + (c.weekly === 1 ? '' : 's'));
       line('feed/     ' + c.feed + ' discoveries');
       line('board/    top ' + c.board);
-      line('ku/       ' + c.ku + ' known unknowns');
+      line('ku/       ' + c.ku + ' open problems');
     },
     cd: function (a, cat) {
       var k = SECTIONS[String(a[0] || '').replace(/\/$/, '')];
       if (typeof k !== 'string') k = null;
       if (!k) { line('cd: no such section: ' + (a[0] || '') + ' (try weekly, feed, board, ku)', 'err'); return; }
-      if (k === 'w' && !API.counts().weekly) { line('cd: no weekly edition in this build yet', 'err'); return; }
+      if (k === 'w' && !API.counts().weekly) { line('cd: no weekly edition yet', 'err'); return; }
       if (cat) {
         var c = cat[0] || null;
         if (c && !API.cats().some(function (x) { return x[0] === c; })) {
@@ -82,20 +82,20 @@
     },
     open: function (a) {
       var id = a[0] || '';
-      if (!API.has(id)) { line(id ? 'open: no such target: ' + id : 'usage: open <id>   (Tab completes)', 'err'); return; }
+      if (!API.has(id)) { line(id ? 'open: no such problem: ' + id : 'usage: open <id>   (Tab completes)', 'err'); return; }
       nav(function () { API.open(id); });
     },
     roll: function () {
-      if (!API.hits()) { line('nothing to roll: clear the filters', 'err'); return; }
+      if (!API.hits()) { line('nothing to pick from: clear the filters', 'err'); return; }
       nav(API.roll);
     },
     hunt: function (a) {
       var id = a[0] || '';
       var txt = SLUG.test(id) && API.hunt(id);
       if (!txt) { line('usage: hunt <id>   (Tab completes)', 'err'); return; }
-      copy(txt, 'the agent prompt');
+      copy(txt, 'the prompt');
     },
-    copy: function () { copy(API.copyJoin(), 'the join command'); },
+    copy: function () { copy(API.copyJoin(), 'the setup line'); },
     cat: function (a) {
       if (a[0] === 'motto') { line('⊰•-•✧•-•-⦑/V\\E/R\\I/T\\A/S\\⦒-•-•✧•-•⊱', 'ok'); line('Veritas liberabit nos.'); return; }
       if (a[0] === 'agents') {
