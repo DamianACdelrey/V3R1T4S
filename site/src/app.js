@@ -35,7 +35,8 @@
   }
   function dayLabel(d) {
     var m = DAY.exec(d);
-    return m ? MONTHS[+m[2] - 1] + ' ' + (+m[3]) + ', ' + m[1] : d;
+    var mon = m && MONTHS[+m[2] - 1];
+    return mon && +m[3] >= 1 && +m[3] <= 31 ? mon + ' ' + (+m[3]) + ', ' + m[1] : d;
   }
 
   /* ---------------- daily discoveries */

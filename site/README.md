@@ -56,7 +56,7 @@ policy. If you ever add a script or style from elsewhere, the page will refuse i
 |---|---|
 | big numbers | `TROPHY_CASE.md` "All rows" (results), the package `INDEX.csv` rows (contributed rows), distinct credit names in package folders (contributors), `bank/targets.json` (open problems) |
 | Daily discoveries | every result package `known-knowns/<family>/<YYYY-MM-DD>-<credit>-<hash8>/`, newest merge first, grouped by merge day. Title: the package README's first heading. Margin: `value vs table_value` from `INDEX.csv` when both are numbers. ✅ when a maintainer note in the package README says the table owner adopted it, otherwise 🧪. |
-| Leaderboard | top 10 credit names by merged result packages, read from folder names. Anonymous credits (`anonymous-…`) stay anonymous: the page never shows who submitted them. |
+| Leaderboard | top 10 credit names by merged result packages, read from folder names. The page shows only the credit name, so an `anonymous-…` pseudonym is all it prints. The ▲ links to the merged pull request, and GitHub shows the account that opened it there (as `kit/SETUP.md` warns, use a separate account for real anonymity). |
 | Known unknowns | all of `bank/targets.json`, with category chips (`bank/categories.json`, emoji from the README table) and a search box. Each links to its `known-unknowns/<category>/<id>.md` page. |
 
 ### Votes
@@ -71,7 +71,7 @@ Packages are matched to pull requests through git history: the oldest commit tha
 ends in `(#NNN)` (squash merges do this). If the build checkout is shallow, the build runs
 `git fetch --unshallow` (with a timeout). If history is still missing, the page falls back to the folder dates and
 shows no votes. If the API is unreachable or rate-limited, the vote counts are left out and the ▲ still links to
-the PR.
+the PR. If `GITHUB_TOKEN` has expired or been revoked, the build warns and continues without it.
 
 ### Suggestions
 
@@ -104,5 +104,7 @@ followed.
 - Contributor-controlled text (titles, folder names, target names) is stripped of control and bidi characters and
   length-capped at build time, and rendered with `textContent` only. `data.json` contains ids, not URLs; `app.js`
   builds each link from a fixed `https://github.com/elder-plinius/V3R1T4S/` prefix and re-checks the ids.
-- Folder and target names that do not match strict patterns are skipped with a warning in the build log.
+- Folder and target names that do not match strict patterns, and package folders whose date is not a real day or
+  is in the future, are skipped with a warning in the build log. Malformed bank JSON is skipped the same way;
+  the build still produces a page.
 - The optional `GITHUB_TOKEN` is sent only to `api.github.com`, and redirects are never followed.

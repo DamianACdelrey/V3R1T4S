@@ -9,7 +9,8 @@ Everything shown on the page is derived from the checkout at build time:
   - counts: TROPHY_CASE.md "All rows", package INDEX.csv files, bank/targets.json;
   - daily discoveries: result packages known-knowns/<family>/<YYYY-MM-DD>-<credit>-<hash8>/, newest merge first,
     each mapped to its pull request through git history (squash commits end in "(#NNN)");
-  - leaderboard: merged result packages per credit name, the name in the folder (anonymous credits stay anonymous);
+  - leaderboard: merged result packages per credit name, the name in the folder (the page shows an anonymous-...
+    pseudonym as is; the linked pull request still shows the GitHub account, as kit/SETUP.md warns);
   - votes: thumbs-up reactions on each pull request, read from the public GitHub API (optional GITHUB_TOKEN);
   - known unknowns: every target in bank/targets.json.
 
@@ -37,6 +38,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import urllib.error
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -62,6 +64,19 @@ GIT_TIMEOUT = 120
 RE_SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,99}$")                     # family, category, target ids
 RE_PKG = re.compile(r"^(\d{4}-\d{2}-\d{2})-([A-Za-z0-9][A-Za-z0-9_.-]{0,63})-([0-9a-f]{8})$")
 RE_PR = re.compile(r"\(#(\d{1,7})\)\s*$")
+
+TODAY = datetime.datetime.now(datetime.timezone.utc).date()
+
+
+def valid_day(d):
+    """d if it is a real calendar date YYYY-MM-DD between 2000-01-01 and tomorrow (UTC), else None."""
+    if not isinstance(d, str) or not re.match(r"^\d{4}-\d{2}-\d{2}$", d):
+        return None
+    try:
+        x = datetime.date(int(d[:4]), int(d[5:7]), int(d[8:10]))
+    except ValueError:
+        return None
+    return d if datetime.date(2000, 1, 1) <= x <= TODAY + datetime.timedelta(days=1) else None
 
 warnings = []
 
@@ -178,9 +193,10 @@ def clean(s, n):
 
 
 def strip_md(s):
-    s = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", s)
-    s = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", s)
-    s = re.sub(r"</?[A-Za-z][^>]*>", "", s)
+    s = s[:600]  # callers pass one heading; never run these patterns on more (they backtrack on runs of '[' or '<')
+    s = re.sub(r"!\[[^\]]{0,300}\]\([^)]{0,300}\)", "", s)
+    s = re.sub(r"\[([^\]]{1,300})\]\([^)]{0,300}\)", r"\1", s)
+    s = re.sub(r"</?[A-Za-z][^>]{0,300}>", "", s)
     s = s.replace("**", "").replace("`", "").replace("\\|", "|")
     s = re.sub(r"(?<![\w*])\*(?!\s)([^*]+?)\*(?!\w)", r"\1", s)
     return s
@@ -276,7 +292,7 @@ def git_history():
         date, _, subject = header.partition("\x1f")
         m = RE_PR.search(subject)
         pr = int(m.group(1)) if m else None
-        day = date[:10] if re.match(r"^\d{4}-\d{2}-\d{2}T", date) else None
+        day = valid_day(date[:10]) if re.match(r"^\d{4}-\d{2}-\d{2}T", date) else None
         names = set()
         for line in body.split("\n"):
             parts = line.split("/")
@@ -299,7 +315,30 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 _opener = urllib.request.build_opener(_NoRedirect)
 
 
+_token_rejected = []
+
+
 def api_get(url, token):
+    """GET a GitHub API URL. If GitHub rejects the token (expired or revoked: 401, or 403 "Bad credentials"),
+    warn once and retry without it, so an expired GITHUB_TOKEN only lowers the rate limit."""
+    if token and not _token_rejected:
+        try:
+            return _api_get(url, token)
+        except urllib.error.HTTPError as e:
+            body = b""
+            if e.code == 403:
+                try:
+                    body = e.read(4096)
+                except (OSError, http.client.HTTPException):
+                    pass
+            if e.code != 401 and not (e.code == 403 and b"bad credentials" in body.lower()):
+                raise
+            _token_rejected.append(e.code)
+            warn("GITHUB_TOKEN rejected by GitHub (HTTP %d: expired or revoked?); continuing without it" % e.code)
+    return _api_get(url, None)
+
+
+def _api_get(url, token):
     if not url.startswith("https://api.github.com/"):
         raise ValueError("refusing non-API URL")
     h = {"Accept": "application/vnd.github+json", "User-Agent": "v3r1t4s-site-build",
@@ -386,7 +425,8 @@ def parse_package(fam, name):
     rel = "known-knowns/%s/%s" % (fam, name)
     m = RE_PKG.match(name)
     readme = try_text(rel + "/README.md") or ""
-    h1 = next((l[2:] for l in readme.split("\n")[:40] if l.startswith("# ")), "")
+    # cap before any regex runs: strip_md's patterns are superlinear on hostile input such as a long run of '['
+    h1 = next((l[2:600] for l in readme.split("\n", 40)[:40] if l.startswith("# ")), "")
     title = re.sub(r"^\d{4}-\d{2}-\d{2}-[\w.-]+-[0-9a-f]{8}:\s*", "", h1)
     title = clean(strip_md(title), 140) or clean(name, 140)
     notes = [l for l in readme.split("\n") if l.startswith("> **Maintainer note")]
@@ -443,19 +483,27 @@ def collect(offline):
     cats_doc = read_json("bank/categories.json") or {}
     emo = readme_category_emoji()
     cats, cat_ids = [], set()
-    for c in (cats_doc.get("categories") or [])[:200] if isinstance(cats_doc, dict) else []:
-        if not isinstance(c, dict) or not RE_SLUG.match(str(c.get("id", ""))) or c["id"] in cat_ids:
+    cat_list = cats_doc.get("categories") if isinstance(cats_doc, dict) else None
+    if not isinstance(cat_list, list):
+        warn("bank/categories.json: no categories list")
+        cat_list = []
+    for c in cat_list[:200]:
+        if not isinstance(c, dict) or not isinstance(c.get("id"), str) or not RE_SLUG.match(c["id"]) \
+                or c["id"] in cat_ids:
             continue
         cat_ids.add(c["id"])
         cats.append({"id": c["id"], "name": clean(c.get("name") or c["id"], 40), "e": emo.get(c["id"]) or "◆", "n": 0})
     cat_by_id = {c["id"]: c for c in cats}
     ku, tcat = [], {}
     targets = bank.get("targets") if isinstance(bank, dict) else None
-    for t in (targets or [])[:MAX_TARGETS]:
+    if not isinstance(targets, list):
+        warn("bank/targets.json: no targets list")
+        targets = []
+    for t in targets[:MAX_TARGETS]:
         if not isinstance(t, dict):
             continue
-        tid, cid = str(t.get("id", "")), str(t.get("category", ""))
-        if not (RE_SLUG.match(tid) and cid in cat_by_id):
+        tid, cid = t.get("id"), t.get("category")
+        if not (isinstance(tid, str) and isinstance(cid, str) and RE_SLUG.match(tid) and cid in cat_by_id):
             warn("bank target skipped: %r" % clean(tid, 60))
             continue
         if tid in tcat:
@@ -467,14 +515,17 @@ def collect(offline):
         tr = t.get("tractability")
         ku.append({"id": tid, "cat": cid, "t": clean(t.get("name") or tid, 180),
                    "k": clean(t.get("kind") or "", 12) or None,
-                   "tr": tr if isinstance(tr, int) and 0 <= tr <= 9 else None,
+                   "tr": tr if isinstance(tr, int) and not isinstance(tr, bool) and 0 <= tr <= 9 else None,
                    "cp": clean(re.split(r"[;(]", str(t.get("compute_profile") or ""))[0], 24) or None})
         cat_by_id[cid]["n"] += 1
     for f in files_in("bank/proposed"):
         if f.endswith(".json") and len(f) < 120:
             p = read_json("bank/proposed/" + f, 1024 * 1024)
-            if isinstance(p, dict) and RE_SLUG.match(str(p.get("id", ""))) and p.get("category") in cat_by_id:
-                tcat.setdefault(p["id"], p["category"])
+            if not isinstance(p, dict):
+                continue
+            pid, pcat = p.get("id"), p.get("category")
+            if isinstance(pid, str) and isinstance(pcat, str) and RE_SLUG.match(pid) and pcat in cat_by_id:
+                tcat.setdefault(pid, pcat)
     ku.sort(key=lambda k: (-(k["tr"] or 0), k["t"].lower()))
 
     # packages
@@ -490,9 +541,15 @@ def collect(offline):
             if not RE_PKG.match(name):
                 warn("package skipped (name): %r" % clean(name, 80))
                 continue
+            if not valid_day(name[:10]):
+                warn("package skipped (date not a real day, or in the future): %r" % clean(name, 80))
+                continue
             if len(pkgs) >= MAX_PACKAGES:
                 break
-            pkgs.append(parse_package(fam, name))
+            try:
+                pkgs.append(parse_package(fam, name))
+            except (TypeError, ValueError, KeyError, IndexError, RecursionError) as e:  # backstop: never fail the build
+                warn("package skipped (%s): %r" % (type(e).__name__, clean(name, 80)))
 
     # family emoji: the category of the family's bank target(s)
     fam_cat = {}
