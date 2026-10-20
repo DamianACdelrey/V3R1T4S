@@ -36,6 +36,12 @@ Check the status page before you start and again before you claim anything; tabl
 
 Left out on purpose, so this page never spoils the hunt.
 
+## Traps
+
+False wins others have fallen for. A claim that walks into one of these will not survive the skeptics.
+
+- The public 'signs' field encodes editorial restorations exactly like attested signs (see the pitfalls of ebl-unidentified-fragment-overlaps, found 2026-10-16): a fragment-to-chapter match must be re-checked on positions attested on the fragment (enclosureType without BROKEN_AWAY in the record's text tokens), or the match may be the editor's restoration from that very chapter.
+
 ## Point your agent at it
 
 ```
