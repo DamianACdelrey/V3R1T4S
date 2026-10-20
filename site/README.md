@@ -1,13 +1,15 @@
 # site/
 
-The V3R1T4S website: one static page built from this repository on every push. No server, no database, no
-cookies, no analytics, no third-party scripts.
+The V3R1T4S website, [v3r1t4s.org](https://v3r1t4s.org): one static page built from this repository on every push.
+No server code, no database, no cookies, no analytics, no third-party requests, no GitHub API and no token.
 
 ```
 site/build.py     reads the checkout, writes site/public/ (standard-library Python 3.8+, no pip, no npm)
-site/src/         page template, app.js, theme.js, style.css, _headers (CSP), favicon, og.png
-site/serve.py     local preview that applies _headers, so the CSP is enforced as on Cloudflare
+site/src/         page templates (index.html, 404.html), app.js, theme.js, style.css, fonts/ (with their OFL
+                  licences), _headers (CSP), favicon, og.png
+site/serve.py     local preview that applies _headers and serves 404.html, so it behaves as on Cloudflare
 site/public/      build output (git-ignored)
+wrangler.jsonc    (repository root) tells Cloudflare to serve site/public/ as static assets
 ```
 
 Preview locally:
@@ -16,62 +18,92 @@ Preview locally:
 python3 site/build.py && python3 site/serve.py      # http://127.0.0.1:8000
 ```
 
-`python3 site/build.py --offline` skips git history and the GitHub API (no votes, dates from folder names).
+`python3 site/build.py --offline` skips git history (discovery dates then come from the folder names).
+`SITE_URL` defaults to `https://v3r1t4s.org`; set the environment variable only to build for another address.
 
-## Cloudflare Pages
+## Cloudflare Workers Builds
 
-Workers & Pages → Create → Pages → **Connect to Git** → `elder-plinius/V3R1T4S`, then:
+The site is a Worker with static assets only (no Worker script), deployed by Workers Builds from GitHub.
+
+Workers & Pages → **Create** → **Import a repository** → connect GitHub → `elder-plinius/V3R1T4S`, then:
 
 | setting | value |
 |---|---|
+| Project name | `v3r1t4s` (must match `"name"` in `wrangler.jsonc`) |
 | Production branch | `main` |
-| Framework preset | **None** |
 | Build command | `python3 site/build.py` |
-| Build output directory | `site/public` |
-| Root directory | *(empty: the repository root)* |
+| Deploy command | `npx wrangler deploy` |
+| Non-production branch deploy command | `npx wrangler versions upload` |
+| Path (root directory) | `/` |
+| Environment variables | **none needed** |
+| Protect with Cloudflare Access | leave **unchecked** (the site is public) |
 
-Environment variables (Settings → Variables and Secrets, for Production and Preview):
+`wrangler.jsonc` at the repository root holds the rest:
 
-| variable | value |
-|---|---|
-| `PYTHON_VERSION` | `3.11` |
-| `SITE_URL` | the site's address, e.g. `https://v3r1t4s.example` (no trailing slash). Used for the canonical link, `og:url`, `og:image` and `sitemap.xml`. Without it the page still works, but link previews may miss the image. |
-| `GITHUB_TOKEN` | optional, as a **Secret**. A fine-grained personal access token with **Public repositories (read-only)** access and no other permissions. It only raises the GitHub API rate limit for the vote counts (60 requests an hour without it, shared with everyone on the build machine's IP). |
+```jsonc
+{"name": "v3r1t4s", "compatibility_date": "2026-10-01",
+ "assets": {"directory": "./site/public", "not_found_handling": "404-page"}}
+```
 
-Every merge to `main` triggers a build, so the page is always as fresh as the repository. Builds of other branches
-become preview deployments. Under Settings → Builds you can turn previews off if you don't want them.
+Every merge to `main` builds and deploys, so the page is as fresh as the repository. Pushes to other branches upload
+a preview version without touching production (Settings → Build → Branch control turns that off).
 
-**Custom domain.** Pages project → Custom domains → Set up a custom domain → enter the domain. If the domain's DNS is
-on Cloudflare, the record is added for you; otherwise add the `CNAME` it shows at your DNS host. Then set `SITE_URL`
-to that domain and retry the latest deployment so the canonical and social links use it.
+**Custom domain.** Worker `v3r1t4s` → Settings → **Domains & Routes** → Add → **Custom domain** → `v3r1t4s.org`
+(and `www.v3r1t4s.org` if wanted). The domain's DNS must be on Cloudflare; the DNS record and the certificate are
+created for you. No rebuild is needed: the build already uses `https://v3r1t4s.org` for the canonical link,
+`og:url`, `og:image`, `sitemap.xml`, `robots.txt` and `feed.xml`.
 
-**Headers.** `site/src/_headers` is copied to the output and applied by Pages: a strict Content-Security-Policy
-(`default-src 'self'`, scripts and styles only from the site itself, no inline scripts, `connect-src 'self'`,
-`frame-ancestors 'none'`, `form-action 'none'`, `base-uri 'none'`), `nosniff`, a referrer policy and a permissions
-policy. If you ever add a script or style from elsewhere, the page will refuse it until `_headers` allows it.
+**Headers.** `site/src/_headers` is copied into `site/public/` and applied by Workers Static Assets: a strict
+Content-Security-Policy (`default-src 'self'`, scripts, styles and fonts only from the site itself, no inline
+scripts or styles, `connect-src 'self'`, `frame-ancestors 'none'`, `form-action 'none'`, `base-uri 'none'`),
+`nosniff`, a referrer policy, a permissions policy and HSTS. If you ever add a script or style from elsewhere, the
+page will refuse it until `_headers` allows it. Missing paths get `404.html` with status 404.
+
+**Pages instead.** Cloudflare Pages also works with the same build: Pages → Connect to Git, framework preset None,
+build command `python3 site/build.py`, output directory `site/public`, root directory empty, custom domain under the
+project's Custom domains tab. Pages honours `_headers` and `404.html` the same way; `wrangler.jsonc` is then unused.
 
 ## What the page shows, and where it comes from
 
 | section | source |
 |---|---|
 | big numbers | `TROPHY_CASE.md` "All rows" (results), the package `INDEX.csv` rows (contributed rows), distinct credit names in package folders (contributors), `bank/targets.json` (open problems) |
-| Daily discoveries | every result package `known-knowns/<family>/<YYYY-MM-DD>-<credit>-<hash8>/`, newest merge first, grouped by merge day. Title: the package README's first heading. Margin: `value vs table_value` from `INDEX.csv` when both are numbers. ✅ when a maintainer note in the package README says the table owner adopted it, otherwise 🧪. |
-| Leaderboard | top 10 credit names by merged result packages, read from folder names. The page shows only the credit name, so an `anonymous-…` pseudonym is all it prints. The ▲ links to the merged pull request, and GitHub shows the account that opened it there (as `kit/SETUP.md` warns, use a separate account for real anonymity). |
+| V3R1T4S Weekly | `news/YYYY-MM-DD.md`, newest first, up to 52 editions (see below) |
+| Daily discoveries | every result package `known-knowns/<family>/<YYYY-MM-DD>-<credit>-<hash8>/`, newest merge first, grouped by merge day (UTC). Title: the package README's first heading. Margin: `value vs table_value` from `INDEX.csv` when both are numbers. ✅ when a maintainer note in the package README says the table owner adopted it, otherwise 🧪. Each links to its package folder, never to a pull request, so an `anonymous-…` credit stays anonymous on the site. |
+| Leaderboard | top 10 credit names by merged result packages, read from folder names. |
 | Known unknowns | all of `bank/targets.json`, with category chips (`bank/categories.json`, emoji from the README table) and a search box. Each links to its `known-unknowns/<category>/<id>.md` page. |
 
-### Votes
+Machine-readable: `/data.json` (everything above), `/feed.xml` (Atom: the newest 30 discoveries and every weekly
+edition), `/sitemap.xml`, `/robots.txt`.
 
-The **▲ N** next to each discovery links to the pull request that merged it; N is the number of 👍 reactions on
-that pull request. Anyone with a GitHub account can vote by adding a 👍 there. The count is read at build time from
-`GET /repos/elder-plinius/V3R1T4S/issues?state=closed` (paginated; it includes each PR's reactions), so it updates on
-the next build. To refresh counts without a merge, use "Retry deployment" in Pages, or add a deploy hook and call it
-on a schedule.
+**Merge dates.** The merge day of a package is the day of the oldest commit that added its folder (preferring a
+squash-merge commit, whose subject ends in `(#NNN)`). If the build checkout is shallow, the build runs
+`git fetch --unshallow` over the clone's own remote, with a timeout. That is plain git transport: no API, no token.
+If history is still missing, the page falls back to the folder dates and the build log says so.
 
-Packages are matched to pull requests through git history: the oldest commit that added the folder, whose subject
-ends in `(#NNN)` (squash merges do this). If the build checkout is shallow, the build runs
-`git fetch --unshallow` (with a timeout). If history is still missing, the page falls back to the folder dates and
-shows no votes. If the API is unreachable or rate-limited, the vote counts are left out and the ▲ still links to
-the PR. If `GITHUB_TOKEN` has expired or been revoked, the build warns and continues without it.
+### V3R1T4S Weekly (`news/`)
+
+The maintainer routine writes one file per week to `news/YYYY-MM-DD.md` (the publication day) and merges it like
+any other change; the next build shows it. The grammar is strict, and a file that breaks it is skipped with a
+warning in the build log:
+
+```
+# V3R1T4S Weekly · 2026-10-13 → 2026-10-19
+
+One or two plain paragraphs, under 600 characters together. Plain text: no HTML, no headings,
+no quotes or tables. Inline **bold**, `code` and [text](link) are reduced to their text.
+
+- Up to 10 bullets, each under 180 characters → known-knowns/<family>/<package>
+- A bullet may end in " → <path>" to link a package or a known unknown → known-unknowns/<category>/<id>.md
+- Or have no link at all
+```
+
+- Line 1 is exactly the heading above (dates `YYYY-MM-DD`, at most 31 days apart). The file's own date must be from
+  the second date to 7 days after it.
+- A bullet link must be an existing `known-knowns/<family>[/<package>]` or `known-unknowns/<category>[/<id>.md]`
+  path whose every segment passes the same name checks as the rest of the site; otherwise the link is dropped (the
+  bullet stays) with a warning. Links point to `https://github.com/elder-plinius/V3R1T4S/tree/main/<path>`.
+- Files must be valid UTF-8, at most 16 KB, regular files (no symlinks). Each edition is linkable as `#w-<date>`.
 
 ### Suggestions
 
@@ -100,11 +132,13 @@ followed.
 ## Security notes
 
 - The build never executes repository content. It runs only `git` (`rev-parse`, `log`, `fetch --unshallow`) with
-  hooks disabled, and reads files with symlinks refused, size caps, and bad UTF-8 replaced.
-- Contributor-controlled text (titles, folder names, target names) is stripped of control and bidi characters and
-  length-capped at build time, and rendered with `textContent` only. `data.json` contains ids, not URLs; `app.js`
-  builds each link from a fixed `https://github.com/elder-plinius/V3R1T4S/` prefix and re-checks the ids.
+  hooks disabled and `file://` remotes refused, and reads files with symlinks refused, size caps, and bad UTF-8
+  replaced (news files with bad UTF-8 are skipped).
+- Contributor-controlled text (titles, folder names, target names, news) is stripped of control and bidi characters
+  and length-capped at build time, rendered with `textContent` only, and escaped in every HTML or XML file the
+  build writes. `data.json` contains ids and relative repository paths, not URLs; `app.js` builds each link from a
+  fixed `https://github.com/elder-plinius/V3R1T4S/` prefix and re-checks the ids.
 - Folder and target names that do not match strict patterns, and package folders whose date is not a real day or
   is in the future, are skipped with a warning in the build log. Malformed bank JSON is skipped the same way;
   the build still produces a page.
-- The optional `GITHUB_TOKEN` is sent only to `api.github.com`, and redirects are never followed.
+- `localStorage` holds only the viewer's theme choice. The page sets no cookies and makes no third-party requests.

@@ -40,7 +40,7 @@
   }
 
   /* ---------------- daily discoveries */
-  var feed = [], feedShown = FEED_STEP, hasVotes = false;
+  var feed = [], feedShown = FEED_STEP;
 
   function feedItem(x) {
     var li = el('li', 'it');
@@ -56,16 +56,7 @@
     if (CREDIT.test(x.c)) meta.appendChild(el('span', 'cr', 'by ' + x.c));
     b.appendChild(meta);
     li.appendChild(e); li.appendChild(b);
-    var pr = int(x.p);
-    if (pr) {
-      var v = int(x.v);
-      var a = link(GH + '/pull/' + pr, 'vote' + (v ? ' on' : ''), '▲ ' + (v != null ? fmt(v) : ''));
-      a.title = 'Add a 👍 on pull request #' + pr;
-      a.setAttribute('aria-label', (v != null ? fmt(v) + ' votes. ' : '') + 'Vote with a 👍 on pull request #' + pr);
-      li.appendChild(a);
-    } else {
-      li.appendChild(el('span'));
-    }
+    li.appendChild(el('span'));
     return li;
   }
 
@@ -166,10 +157,7 @@
 
   /* ---------------- data */
   function load(D) {
-    if (!D || D.schema !== 'v3r1t4s-site/1') throw new Error('bad data');
-    hasVotes = !!D.votes;
-    var s = int(D.stars);
-    if (s != null) $('#stars').textContent = fmt(s);
+    if (!D || D.schema !== 'v3r1t4s-site/2') throw new Error('bad data');
     feed = (Array.isArray(D.feed) ? D.feed : []).filter(function (x) {
       return x && DAY.test(x.d) && typeof x.t === 'string';
     }).slice(0, 20000);

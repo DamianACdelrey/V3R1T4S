@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Preview site/public on http://127.0.0.1:8000 with the headers from site/public/_headers applied, so the
-Content-Security-Policy is enforced the way Cloudflare Pages enforces it. Local preview only.
+Content-Security-Policy is enforced the way Cloudflare enforces it, and with 404.html served for missing paths.
+Local preview only.
 
     python3 site/build.py && python3 site/serve.py [--port 8000] [--dir site/public]
 
@@ -43,13 +44,37 @@ def matches(pattern, path):
 class Handler(http.server.SimpleHTTPRequestHandler):
     rules = []
 
-    def end_headers(self):
+    def _rule_headers(self):
         path = self.path.split("?", 1)[0].split("#", 1)[0]
-        for pattern, headers in self.rules:
-            if matches(pattern, path):
-                for k, v in headers:
-                    self.send_header(k, v)
+        return [(k, v) for pattern, headers in self.rules if matches(pattern, path) for k, v in headers]
+
+    def send_header(self, keyword, value):
+        # a Content-Type from _headers replaces the guessed one, as on Cloudflare
+        if keyword.lower() == "content-type" and not getattr(self, "_applying", False) \
+                and any(k.lower() == "content-type" for k, _ in self._rule_headers()):
+            return
+        super().send_header(keyword, value)
+
+    def end_headers(self):
+        self._applying = True
+        for k, v in self._rule_headers():
+            self.send_header(k, v)
+        self._applying = False
         super().end_headers()
+
+    def send_error(self, code, message=None, explain=None):
+        # like not_found_handling "404-page": serve 404.html with status 404
+        page = os.path.join(self.directory, "404.html")
+        if code == 404 and os.path.isfile(page):
+            body = open(page, "rb").read()
+            self.send_response(404)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(body)
+            return
+        super().send_error(code, message, explain)
 
     def log_message(self, fmt, *args):
         pass

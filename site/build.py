@@ -3,32 +3,37 @@
 
     python3 site/build.py [--out site/public] [--offline]
 
-Standard library only, Python 3.8+. Cloudflare Pages runs it on every push to main (see site/README.md).
+Standard library only, Python 3.8+, no network except git's own transport. Cloudflare Workers Builds runs it on
+every push to main and then deploys site/public/ as static assets (see site/README.md and wrangler.jsonc).
 
 Everything shown on the page is derived from the checkout at build time:
   - counts: TROPHY_CASE.md "All rows", package INDEX.csv files, bank/targets.json;
-  - daily discoveries: result packages known-knowns/<family>/<YYYY-MM-DD>-<credit>-<hash8>/, newest merge first,
-    each mapped to its pull request through git history (squash commits end in "(#NNN)");
-  - leaderboard: merged result packages per credit name, the name in the folder (the page shows an anonymous-...
-    pseudonym as is; the linked pull request still shows the GitHub account, as kit/SETUP.md warns);
-  - votes: thumbs-up reactions on each pull request, read from the public GitHub API (optional GITHUB_TOKEN);
-  - known unknowns: every target in bank/targets.json.
+  - daily discoveries: result packages known-knowns/<family>/<YYYY-MM-DD>-<credit>-<hash8>/, newest merge first.
+    The merge day comes from git history (the commit that added the folder); without history, from the folder name.
+    Each one links to its package folder in the repository, never to a pull request, so an anonymous credit stays
+    anonymous on the site;
+  - leaderboard: merged result packages per credit name, the name in the folder;
+  - known unknowns: every target in bank/targets.json;
+  - V3R1T4S Weekly: news/YYYY-MM-DD.md, in a strict plain-text grammar (see parse_news).
+
+There is no GitHub API call, no credential and no vote or star count: the only network access is one optional
+'git fetch --unshallow' over the clone's own remote when the build checkout is shallow.
 
 Repository content is untrusted input (contributors write package READMEs, INDEX.csv files and folder names):
-  - nothing from the repository is executed or imported; the only programs run are git (log, rev-parse, fetch);
-  - symlinks are never followed, files are size-capped, bad UTF-8 is replaced, control and bidi characters are
-    stripped, every string is length-capped;
+  - nothing from the repository is executed or imported; the only program run is git (rev-parse, log, fetch);
+  - symlinks are never followed, files are size-capped, bad UTF-8 is replaced (news files: rejected), control and
+    bidi characters are stripped, every string is length-capped;
   - names that become URL path segments must match strict patterns, otherwise the item is skipped;
   - from INDEX.csv only the value and table_value columns are used, and only when both parse as numbers (so a
     formula such as =HYPERLINK(...) is never shown); the page never exports CSV;
-  - data.json carries ids, never URLs: app.js builds every link from fixed github.com/elder-plinius/V3R1T4S
-    prefixes and re-checks the ids, and renders text with textContent only.
+  - data.json carries ids and relative repo paths, never URLs: app.js builds every link from fixed
+    github.com/elder-plinius/V3R1T4S prefixes and re-checks the ids, and renders text with textContent only;
+  - HTML and XML written here (index.html, 404.html, feed.xml, sitemap.xml) escape every value.
 """
 import argparse
 import csv
 import datetime
 import html
-import http.client
 import io
 import json
 import math
@@ -38,15 +43,15 @@ import shutil
 import stat
 import subprocess
 import sys
-import urllib.error
-import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 SRC = os.path.join(HERE, "src")
 OWNER_REPO = "elder-plinius/V3R1T4S"
 GH = "https://github.com/" + OWNER_REPO
-API = "https://api.github.com/repos/" + OWNER_REPO
+SITE_URL_DEFAULT = "https://v3r1t4s.org"
+SCHEMA = "v3r1t4s-site/2"
+TEMPLATES = ("index.html", "404.html")  # rendered from site/src/, never copied raw
 
 # ------------------------------------------------------------------ limits
 MAX_MD = 512 * 1024          # a README or TROPHY_CASE.md
@@ -55,15 +60,22 @@ MAX_JSON = 16 * 1024 * 1024  # bank/targets.json (1.7 MB today)
 MAX_ROWS = 500               # INDEX.csv rows read per package
 MAX_PACKAGES = 20000
 MAX_TARGETS = 20000
-MAX_API_PAGES = 60           # 100 issues per page
-MAX_API_BYTES = 16 * 1024 * 1024
-API_TIMEOUT = 20
 GIT_TIMEOUT = 120
+MAX_NEWS = 52                # editions kept in data.json (a year of weeklies)
+MAX_NEWS_SCAN = 200          # newest news/ file names looked at
+MAX_NEWS_FILE = 16 * 1024    # one edition (the grammar allows about 5 KB)
+NEWS_PARAS_CHARS = 600       # all paragraphs together, under this
+NEWS_BULLETS = 10
+NEWS_BULLET_CHARS = 180      # one bullet's text (without its " → path"), under this
+NEWS_PATH_CHARS = 200
+FEED_DISCOVERIES = 30        # newest discoveries in feed.xml
 
 # ------------------------------------------------------------------ name patterns (anything else is skipped)
-RE_SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,99}$")                     # family, category, target ids
-RE_PKG = re.compile(r"^(\d{4}-\d{2}-\d{2})-([A-Za-z0-9][A-Za-z0-9_.-]{0,63})-([0-9a-f]{8})$")
+# \Z, not $: '$' also matches before a trailing newline
+RE_SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,99}\Z")                    # family, category, target ids
+RE_PKG = re.compile(r"^(\d{4}-\d{2}-\d{2})-([A-Za-z0-9][A-Za-z0-9_.-]{0,63})-([0-9a-f]{8})\Z")
 RE_PR = re.compile(r"\(#(\d{1,7})\)\s*$")
+RE_SHA = re.compile(r"^[0-9a-f]{40}\Z")
 
 TODAY = datetime.datetime.now(datetime.timezone.utc).date()
 
@@ -185,9 +197,12 @@ _CTRL = re.compile("[\x00-\x1f\x7f-\x9f­؜ᅟᅠ᠎​-‏ -‮"
                    "⁠-⁯ㅤ︀-︎﻿￰-￻\U000e0000-\U000e007f]")
 
 
+_SURROGATE = re.compile("[\ud800-\udfff]")
+
+
 def clean(s, n):
     """Untrusted text -> one line, no control/bidi characters, at most n characters."""
-    s = _CTRL.sub(" ", str(s))
+    s = _SURROGATE.sub("", _CTRL.sub(" ", str(s)))  # lone surrogates can come from JSON "\\ud800" escapes
     s = re.sub(r"\s+", " ", s).strip()
     return s if len(s) <= n else s[: n - 1].rstrip() + "…"
 
@@ -248,7 +263,7 @@ def margin(value, table):
     return None
 
 
-# ------------------------------------------------------------------ git
+# ------------------------------------------------------------------ git (local commands; one optional fetch)
 def git(args, timeout=GIT_TIMEOUT):
     env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_ASKPASS="true", GIT_OPTIONAL_LOCKS="0")
     cmd = ["git", "-C", REPO, "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false",
@@ -265,133 +280,210 @@ def git(args, timeout=GIT_TIMEOUT):
     return r.stdout.decode("utf-8", "replace")
 
 
-def git_history():
-    """{package folder name: (merge date YYYY-MM-DD, PR number or None)} from the commits that added each package.
+def git_head():
+    h = (git(["rev-parse", "HEAD"], 30) or "").strip()
+    return h if RE_SHA.match(h) else None
 
-    Returns None when history is unavailable (no git, or a shallow clone that cannot be deepened)."""
+
+def git_history():
+    """{package folder name: (merge day YYYY-MM-DD in UTC, commit unix time)} from the commits that added each
+    package, or None when history is unavailable (no git, or a shallow clone that cannot be deepened).
+
+    A shallow clone is deepened with 'git fetch --unshallow' over the clone's own remote: git transport, no API, no
+    credentials of ours, bounded by GIT_TIMEOUT. If that fails (no network), the caller uses the folder dates."""
     if git(["rev-parse", "--git-dir"], 30) is None:
-        return None, None
-    head = (git(["log", "-1", "--format=%H"], 30) or "").strip()
+        return None
     shallow = (git(["rev-parse", "--is-shallow-repository"], 30) or "").strip()
     if shallow == "true":
         print("shallow clone: trying git fetch --unshallow", file=sys.stderr)
         git(["fetch", "--unshallow", "--quiet", "--no-tags", "--no-recurse-submodules"], GIT_TIMEOUT)
         shallow = (git(["rev-parse", "--is-shallow-repository"], 30) or "").strip()
         if shallow != "false":
-            warn("history unavailable (shallow clone); dates come from folder names and votes are skipped")
-            return None, head
+            warn("history unavailable (shallow clone); discovery dates come from folder names")
+            return None
     out = git(["log", "--no-renames", "--diff-filter=A", "--name-only", "--no-textconv", "--no-ext-diff",
-               "--format=%x1e%cI%x1f%s", "--", "known-knowns"])
+               "--format=%x1e%ct%x1f%s", "--", "known-knowns"])
     if out is None:
-        return None, head
+        return None
     first = {}
     for chunk in out.split("\x1e"):
         if not chunk.strip():
             continue
         header, _, body = chunk.partition("\n")
         date, _, subject = header.partition("\x1f")
-        m = RE_PR.search(subject)
-        pr = int(m.group(1)) if m else None
-        day = valid_day(date[:10]) if re.match(r"^\d{4}-\d{2}-\d{2}T", date) else None
+        squash = RE_PR.search(subject) is not None
+        ts = int(date) if re.match(r"^\d{1,12}$", date.strip()) else None
+        try:
+            day = valid_day(datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).strftime("%Y-%m-%d"))
+        except (TypeError, ValueError, OverflowError, OSError):
+            day = None
+        if not day:
+            continue
         names = set()
         for line in body.split("\n"):
             parts = line.split("/")
             if len(parts) >= 3 and parts[0] == "known-knowns" and RE_PKG.match(parts[2]):
                 names.add(parts[2])
         for n in names:
-            # log is newest first: the last commit seen is the oldest. Prefer the oldest commit that names a PR.
+            # log is newest first, so the last commit seen is the oldest. Prefer the oldest squash-merge commit
+            # (subject ends in "(#NNN)"): its committer date is the merge date even if branch commits came along.
             old = first.get(n)
-            if old is None or pr is not None or old[1] is None:
-                first[n] = (day, pr)
-    return first, head
+            if old is None or squash or not old[2]:
+                first[n] = (day, ts, squash)
+    return {n: (v[0], v[1]) for n, v in first.items()}
 
 
-# ------------------------------------------------------------------ GitHub API (read only)
-class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, *a, **k):
-        return None  # never follow a redirect (it could carry the token elsewhere)
+# ------------------------------------------------------------------ V3R1T4S Weekly (news/YYYY-MM-DD.md)
+RE_NEWS_FILE = re.compile(r"^(\d{4}-\d{2}-\d{2})\.md\Z")
+RE_NEWS_H1 = re.compile(r"^# V3R1T4S Weekly[ \t]+[·\-–—][ \t]+(\d{4}-\d{2}-\d{2})"
+                        r"[ \t]+(?:→|->|–|—)[ \t]+(\d{4}-\d{2}-\d{2})\Z")
+# "no HTML": a tag start (<a, </, <!, <?) or a character reference (&amp; &#60; &#x3c;) makes the file invalid
+RE_NEWS_HTML = re.compile(r"<\s*[A-Za-z/!?]|&(?:#[0-9]{1,8}|#[xX][0-9A-Fa-f]{1,8}|[A-Za-z][A-Za-z0-9]{1,31});")
+RE_NEWS_CTRL = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f]")
 
 
-_opener = urllib.request.build_opener(_NoRedirect)
-
-
-_token_rejected = []
-
-
-def api_get(url, token):
-    """GET a GitHub API URL. If GitHub rejects the token (expired or revoked: 401, or 403 "Bad credentials"),
-    warn once and retry without it, so an expired GITHUB_TOKEN only lowers the rate limit."""
-    if token and not _token_rejected:
-        try:
-            return _api_get(url, token)
-        except urllib.error.HTTPError as e:
-            body = b""
-            if e.code == 403:
-                try:
-                    body = e.read(4096)
-                except (OSError, http.client.HTTPException):
-                    pass
-            if e.code != 401 and not (e.code == 403 and b"bad credentials" in body.lower()):
-                raise
-            _token_rejected.append(e.code)
-            warn("GITHUB_TOKEN rejected by GitHub (HTTP %d: expired or revoked?); continuing without it" % e.code)
-    return _api_get(url, None)
-
-
-def _api_get(url, token):
-    if not url.startswith("https://api.github.com/"):
-        raise ValueError("refusing non-API URL")
-    h = {"Accept": "application/vnd.github+json", "User-Agent": "v3r1t4s-site-build",
-         "X-GitHub-Api-Version": "2022-11-28"}
-    if token:
-        h["Authorization"] = "Bearer " + token
-    with _opener.open(urllib.request.Request(url, headers=h), timeout=API_TIMEOUT) as r:
-        if r.status != 200:
-            raise ValueError("HTTP %d" % r.status)
-        body = r.read(MAX_API_BYTES + 1)
-        if len(body) > MAX_API_BYTES:
-            raise ValueError("response too large")
-        return json.loads(body.decode("utf-8")), r.headers.get("Link") or ""
-
-
-def fetch_votes(token):
-    """{PR number: thumbs-up count} for all closed issues and PRs, or None if the API is unreachable."""
-    url = API + "/issues?state=closed&per_page=100"
-    votes = {}
-    for _ in range(MAX_API_PAGES):
-        try:
-            data, link = api_get(url, token)
-        except (OSError, ValueError, http.client.HTTPException) as e:
-            warn("votes skipped: GitHub API: %s" % clean(e, 200))
-            return None
-        if not isinstance(data, list):
-            warn("votes skipped: unexpected API response")
-            return None
-        for it in data:
-            try:
-                if "pull_request" not in it:
-                    continue
-                n, up = it["number"], it["reactions"]["+1"]
-                if isinstance(n, int) and isinstance(up, int) and 0 < n < 10 ** 7 and 0 <= up < 10 ** 7:
-                    votes[n] = up
-            except (KeyError, TypeError):
-                continue
-        m = re.search(r'<(https://api\.github\.com/[^>\s]+)>;\s*rel="next"', link)
-        if not m:
-            return votes
-        url = m.group(1)
-    warn("votes: stopped after %d pages" % MAX_API_PAGES)
-    return votes
-
-
-def fetch_stars(token):
-    try:
-        d, _ = api_get(API, token)
-        s = d.get("stargazers_count")
-        return s if isinstance(s, int) and 0 <= s < 10 ** 9 else None
-    except (OSError, ValueError, AttributeError, http.client.HTTPException) as e:
-        warn("stars skipped: %s" % clean(e, 200))
+def news_path(p):
+    """A relative repo path for a news bullet, or None. Allowed: known-knowns/<family>[/<package>[/README.md]] and
+    known-unknowns/<category>[/<id>.md | /README.md], every segment pattern-checked, and the path must exist in the
+    checkout (a directory or a regular file, no symlink anywhere)."""
+    if not isinstance(p, str) or len(p) > NEWS_PATH_CHARS:
         return None
+    p = p[:-1] if p.endswith("/") else p
+    parts = p.split("/")
+    ok = False
+    if parts[0] == "known-knowns" and 2 <= len(parts) <= 4 and RE_SLUG.match(parts[1]):
+        ok = len(parts) == 2 or (RE_PKG.match(parts[2]) is not None and (len(parts) == 3 or parts[3] == "README.md"))
+    elif parts[0] == "known-unknowns" and 2 <= len(parts) <= 3 and RE_SLUG.match(parts[1]):
+        ok = len(parts) == 2 or parts[2] == "README.md" or (
+            parts[2].endswith(".md") and RE_SLUG.match(parts[2][:-3]) is not None)
+    if not ok:
+        return None
+    try:
+        st = _lstat_chain(p)[1]
+    except (OSError, Unsafe):
+        return None
+    return p if stat.S_ISDIR(st.st_mode) or stat.S_ISREG(st.st_mode) else None
+
+
+_MD_LINK = re.compile(r"!?\[([^\[\]]{0,300})\]\((?:[^()\s]|\([^()\s]{0,100}\)){0,300}\)")
+
+
+def news_text(s):
+    """Plain text from a paragraph or bullet: inline markdown (links, bold, code) reduced to its text. Inputs are
+    at most a few hundred characters (checked before this runs); a link target, even one with parentheses, is
+    dropped."""
+    return clean(strip_md(_MD_LINK.sub(r"\1", s[:700])), 600)
+
+
+def parse_news_file(name):
+    """One edition, or None (with a warning) when the file breaks the grammar:
+
+        # V3R1T4S Weekly · <from> → <to>          (line 1; dates YYYY-MM-DD, from <= to, at most 31 days apart)
+        <blank>
+        1 or 2 paragraphs of plain text, separated by blank lines, under 600 characters together
+        <blank>
+        up to 10 bullets "- <text>" (text under 180 characters), each optionally ending " → <relative repo path>"
+
+    The file is news/<date>.md, where <date> is the publication day: from <to> to 7 days after it. No HTML, no
+    headings, no other line types; strict UTF-8; at most 16 KB."""
+    rel = "news/" + name
+    fdate = valid_day(RE_NEWS_FILE.match(name).group(1))
+    if not fdate:
+        warn("news skipped (%s: date is not a real day, or is in the future)" % clean(name, 40))
+        return None
+
+    def bad(why):
+        warn("news skipped (%s: %s)" % (clean(name, 40), why))
+
+    try:
+        raw = read_bytes(rel, MAX_NEWS_FILE)
+    except (OSError, Unsafe) as e:
+        return bad(clean(e, 120))
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return bad("not valid UTF-8")
+    text = text.lstrip("﻿").replace("\r\n", "\n")
+    if RE_NEWS_CTRL.search(text):
+        return bad("control characters")
+    if RE_NEWS_HTML.search(text):
+        return bad("contains HTML")
+    lines = [l.rstrip(" \t") for l in text.split("\n")]
+    while lines and not lines[-1]:
+        lines.pop()
+    m = RE_NEWS_H1.match(lines[0].strip()) if lines else None
+    if not m:
+        return bad('line 1 is not "# V3R1T4S Weekly · YYYY-MM-DD → YYYY-MM-DD"')
+    d_from, d_to = valid_day(m.group(1)), valid_day(m.group(2))
+    if not d_from or not d_to or d_from > d_to:
+        return bad("bad date range")
+    f, t, p = (datetime.date.fromisoformat(x) for x in (d_from, d_to, fdate))
+    if (t - f).days > 31 or not (t <= p <= t + datetime.timedelta(days=7)):
+        return bad("range longer than 31 days, or file date not within 7 days after the range")
+    paras, cur, bullets = [], [], []
+    for line in lines[1:]:
+        if line.startswith("- "):
+            if cur:
+                paras.append(" ".join(cur))
+                cur = []
+            bullets.append(line[2:].strip())
+        elif not line.strip():
+            if cur:
+                paras.append(" ".join(cur))
+                cur = []
+        elif bullets:
+            return bad("text after the bullets")
+        elif re.match(r"^\s*(?:[#>|]|[*+-]\s|\d+[.)]\s|```|~~~)", line) or line.startswith(("    ", "\t")):
+            return bad("only plain paragraphs and '- ' bullets are allowed")
+        else:
+            cur.append(line.strip())
+    if cur:
+        paras.append(" ".join(cur))
+    if not 1 <= len(paras) <= 2:
+        return bad("needs 1 or 2 paragraphs, found %d" % len(paras))
+    if sum(len(x) for x in paras) >= NEWS_PARAS_CHARS:
+        return bad("paragraphs are %d characters, the limit is under %d"
+                   % (sum(len(x) for x in paras), NEWS_PARAS_CHARS))
+    if len(bullets) > NEWS_BULLETS:
+        return bad("%d bullets, the limit is %d" % (len(bullets), NEWS_BULLETS))
+    out_b = []
+    for b in bullets:
+        body, path = b, None
+        head, sep, tail = b.rpartition(" → ")
+        tail = tail.strip()
+        if sep and tail and not re.search(r"\s", tail) and ("/" in tail or ":" in tail):
+            body = head.strip()
+            path = news_path(tail)
+            if path is None:
+                warn("news %s: link dropped (not an existing known-knowns/ or known-unknowns/ path): %r"
+                     % (clean(name, 40), clean(tail, 80)))
+        if not body:
+            return bad("empty bullet")
+        if len(body) >= NEWS_BULLET_CHARS:
+            return bad("a bullet is %d characters, the limit is under %d" % (len(body), NEWS_BULLET_CHARS))
+        out_b.append({"t": news_text(body), "path": path})
+    return {
+        "id": fdate, "title": "V3R1T4S Weekly · %s → %s" % (d_from, d_to), "from": d_from, "to": d_to,
+        "paras": [news_text(x) for x in paras], "bullets": out_b,
+    }
+
+
+def parse_news():
+    """Valid editions from news/, newest first, at most MAX_NEWS. A missing news/ folder means no editions."""
+    names = [n for n in files_in("news") if RE_NEWS_FILE.match(n)]
+    names.sort(reverse=True)
+    out = []
+    for n in names[:MAX_NEWS_SCAN]:
+        if len(out) >= MAX_NEWS:
+            break
+        try:
+            e = parse_news_file(n)
+        except (TypeError, ValueError, KeyError, IndexError, RecursionError) as ex:  # backstop
+            warn("news skipped (%s: %s)" % (clean(n, 40), type(ex).__name__))
+            e = None
+        if e:
+            out.append(e)
+    return out
 
 
 # ------------------------------------------------------------------ repo parsers
@@ -463,21 +555,28 @@ def parse_package(fam, name):
 
 # ------------------------------------------------------------------ build
 def valid_site_url(u):
+    """The site's absolute address without a trailing slash. SITE_URL overrides the default when it is a plain
+    https://host[/path] URL; anything else is ignored with a warning."""
     u = (u or "").strip().rstrip("/")
     if not u:
-        return None
-    if not re.match(r"^https://[A-Za-z0-9.-]{1,253}(:\d{1,5})?(/[A-Za-z0-9._~/-]*)?$", u):
-        warn("SITE_URL ignored (must be https://host[/path]): %r" % clean(u, 120))
-        return None
+        return SITE_URL_DEFAULT
+    if not re.match(r"^https://[A-Za-z0-9.-]{1,253}(:\d{1,5})?(/[A-Za-z0-9._~/-]*)?\Z", u):
+        warn("SITE_URL ignored (must be https://host[/path]): %r; using %s" % (clean(u, 120), SITE_URL_DEFAULT))
+        return SITE_URL_DEFAULT
     return u
 
 
-def collect(offline):
-    token = (os.environ.get("GITHUB_TOKEN") or "").strip() or None
-    if token and not re.match(r"^[A-Za-z0-9_]{20,255}$", token):
-        warn("GITHUB_TOKEN ignored (unexpected format)")
-        token = None
+def compute_bucket(cp):
+    """Effort bucket from the first profile in a compute_profile string (UX plan M6)."""
+    s = (cp or "").strip().lower()
+    for prefix, b in (("laptop-minutes", "min"), ("laptop-hours", "hours"), ("laptop-days", "days"),
+                      ("needs cluster", "cluster"), ("pure thought", "thought")):
+        if s.startswith(prefix):
+            return b
+    return None
 
+
+def collect(offline):
     # bank
     bank = read_json("bank/targets.json") or {}
     cats_doc = read_json("bank/categories.json") or {}
@@ -492,7 +591,8 @@ def collect(offline):
                 or c["id"] in cat_ids:
             continue
         cat_ids.add(c["id"])
-        cats.append({"id": c["id"], "name": clean(c.get("name") or c["id"], 40), "e": emo.get(c["id"]) or "◆", "n": 0})
+        cats.append({"id": c["id"], "name": clean(c.get("name") or c["id"], 40), "e": emo.get(c["id"]) or "◆",
+                     "n": 0})
     cat_by_id = {c["id"]: c for c in cats}
     ku, tcat = [], {}
     targets = bank.get("targets") if isinstance(bank, dict) else None
@@ -513,10 +613,11 @@ def collect(offline):
             warn("no known-unknowns page for %s/%s" % (cid, tid))
             continue
         tr = t.get("tractability")
+        cp = clean(re.split(r"[;(]", str(t.get("compute_profile") or ""))[0], 24) or None
         ku.append({"id": tid, "cat": cid, "t": clean(t.get("name") or tid, 180),
                    "k": clean(t.get("kind") or "", 12) or None,
                    "tr": tr if isinstance(tr, int) and not isinstance(tr, bool) and 0 <= tr <= 9 else None,
-                   "cp": clean(re.split(r"[;(]", str(t.get("compute_profile") or ""))[0], 24) or None})
+                   "cp": cp, "cb": compute_bucket(clean(t.get("compute_profile") or "", 200))})
         cat_by_id[cid]["n"] += 1
     for f in files_in("bank/proposed"):
         if f.endswith(".json") and len(f) < 120:
@@ -560,26 +661,19 @@ def collect(offline):
         if p["f"] in tcat:
             fam_cat.setdefault(p["f"], tcat[p["f"]])
 
-    hist, head = (None, None) if offline else git_history()
-    if offline:
-        head = (git(["log", "-1", "--format=%H"], 30) or "").strip()
-    votes = None
-    stars = None
-    if not offline:
-        if hist is not None:
-            votes = fetch_votes(token)
-        stars = fetch_stars(token)
+    hist = None if offline else git_history()
+    head = git_head()
 
-    feed = []
+    feed, order = [], {}
     for p in pkgs:
-        day, pr = (hist or {}).get(p["id"], (None, None))
+        day, ts = (hist or {}).get(p["id"], (None, None))
         cid = fam_cat.get(p["f"])
         feed.append({
             "d": day or p["date"], "e": cat_by_id[cid]["e"] if cid in cat_by_id else "🔬", "t": p["t"], "m": p["m"],
-            "s": p["s"], "c": p["c"], "p": pr, "v": votes.get(pr, 0) if (votes is not None and pr) else None,
-            "f": p["f"], "k": p["id"],
+            "s": p["s"], "c": p["c"], "f": p["f"], "k": p["id"],
         })
-    feed.sort(key=lambda x: (x["d"], x["p"] or 0, x["k"]), reverse=True)
+        order[p["id"]] = ts or 0
+    feed.sort(key=lambda x: (x["d"], order[x["k"]], x["k"]), reverse=True)
 
     board = {}
     for p in pkgs:
@@ -592,61 +686,120 @@ def collect(offline):
 
     counts = {"results": trophy_rows(), "contributed": contributed_rows, "contributors": len(board),
               "known_unknowns": len(ku), "packages": len(pkgs), "categories": len([c for c in cats if c["n"]])}
-    data = {
-        "schema": "v3r1t4s-site/1",
+    return {
+        "schema": SCHEMA,
         "built": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "commit": head[:12] if head and re.match(r"^[0-9a-f]{40}$", head) else None,
+        "commit": head[:12] if head else None,
         "history": hist is not None,
-        "votes": votes is not None,
-        "stars": stars,
         "counts": counts,
+        "news": parse_news(),
         "feed": feed,
         "board": [{"c": b["c"], "n": b["n"]} for b in lb[:10]],
         "cats": [c for c in cats if c["n"]],
         "ku": ku,
     }
-    return data
 
 
+# ------------------------------------------------------------------ output
 def fmt(n):
     return "{:,}".format(n) if isinstance(n, int) else "–"
 
 
-def render_index(data, site_url):
-    tpl = open(os.path.join(SRC, "index.html"), encoding="utf-8").read()
+def esc(s):
+    """Escape for HTML or XML text and attribute values, dropping characters XML 1.0 does not allow."""
+    return html.escape(_XML_BAD.sub("", str(s)), quote=True)
+
+
+_XML_BAD = re.compile("[^\t\n\r\x20-퟿-�\U00010000-\U0010ffff]")
+
+
+def render_template(name, data, site_url):
+    """site/src/<name> with {{PLACEHOLDER}}s filled in. Every value is escaped here; the template is ours."""
+    with open(os.path.join(SRC, name), encoding="utf-8") as f:
+        tpl = f.read()
     c = data["counts"]
     desc = ("Turn your unused tokens into scientific discoveries. %s results, %s contributed rows, %s known "
             "unknowns. Not peer reviewed: every result ships with its own checker."
             % (fmt(c["results"]), fmt(c["contributed"]), fmt(c["known_unknowns"])))
-    meta = []
-    if site_url:
-        meta += ['<link rel="canonical" href="%s/">' % html.escape(site_url),
-                 '<meta property="og:url" content="%s/">' % html.escape(site_url),
-                 '<meta property="og:image" content="%s/og.png">' % html.escape(site_url),
-                 '<meta name="twitter:image" content="%s/og.png">' % html.escape(site_url)]
-    else:
-        meta += ['<meta property="og:image" content="og.png">', '<meta name="twitter:image" content="og.png">']
+    u = esc(site_url)
+    meta = ['<meta property="og:image" content="%s/og.png">' % u,
+            '<meta name="twitter:image" content="%s/og.png">' % u,
+            '<link rel="alternate" type="application/atom+xml" title="V3R1T4S discoveries and weekly" '
+            'href="%s/feed.xml">' % u]
+    if name == "index.html":
+        meta = ['<link rel="canonical" href="%s/">' % u, '<meta property="og:url" content="%s/">' % u] + meta
+    commit = data["commit"] or ""
     subs = {
-        "DESCRIPTION": html.escape(desc),
+        "DESCRIPTION": esc(desc),
         "SITE_META": "\n".join(meta),
-        "N_RESULTS": html.escape(fmt(c["results"])),
-        "N_CONTRIBUTED": html.escape(fmt(c["contributed"])),
-        "N_CONTRIBUTORS": html.escape(fmt(c["contributors"])),
-        "N_KNOWN_UNKNOWNS": html.escape(fmt(c["known_unknowns"])),
-        "STARS": html.escape(fmt(data["stars"])) if data["stars"] is not None else "",
-        "BUILT": html.escape(data["built"][:10]),
-        "COMMIT": html.escape(data["commit"] or ""),
-        "YEAR": html.escape(data["built"][:4]),
+        "SITE_URL": u,
+        "N_RESULTS": esc(fmt(c["results"])),
+        "N_CONTRIBUTED": esc(fmt(c["contributed"])),
+        "N_CONTRIBUTORS": esc(fmt(c["contributors"])),
+        "N_KNOWN_UNKNOWNS": esc(fmt(c["known_unknowns"])),
+        "BUILT": esc(data["built"][:10]),
+        "BUILT_ISO": esc(data["built"]),
+        "COMMIT": esc(commit),
+        "COMMIT_LINK": (' · <a id="commit" href="%s/commit/%s">%s</a>' % (GH, esc(commit), esc(commit[:7]))
+                        if re.match(r"^[0-9a-f]{7,40}\Z", commit) else ""),
+        "YEAR": esc(data["built"][:4]),
     }
+    unknown = sorted(set(re.findall(r"\{\{([A-Z_]+)\}\}", tpl)) - set(subs))
+    if unknown:
+        sys.exit("site/src/%s: unknown placeholder(s) %s (known: %s)"
+                 % (name, ", ".join("{{%s}}" % x for x in unknown), ", ".join(sorted(subs))))
     out = re.sub(r"\{\{([A-Z_]+)\}\}", lambda m: subs[m.group(1)], tpl)
-    assert "{{" not in out
+    if "{{" in out:
+        sys.exit("site/src/%s: malformed placeholder" % name)
     return out
+
+
+def atom_feed(data, site_url):
+    """Atom 1.0: the newest FEED_DISCOVERIES discoveries plus every weekly edition, newest first. Text content
+    only (no HTML), every value escaped, links built from fixed prefixes and pattern-checked ids."""
+    u = site_url
+    entries = []
+    for i, x in enumerate(data["feed"][:FEED_DISCOVERIES]):
+        if not (RE_SLUG.match(x["f"]) and RE_PKG.match(x["k"])):
+            continue
+        bits = [x["m"]] if x["m"] else []
+        bits.append("by " + x["c"])
+        bits.append("listed by the table owner" if x["s"] == "o"
+                    else "verified by us, not yet listed by the table owner")
+        entries.append((x["d"], 1, -i, (
+            "<entry><title>%s</title><id>tag:v3r1t4s.org,2026:discovery/%s</id><updated>%sT00:00:00Z</updated>"
+            '<link rel="alternate" type="text/html" href="%s/tree/main/known-knowns/%s/%s"/>'
+            '<summary type="text">%s</summary></entry>'
+            % (esc(x["t"]), esc(x["k"]), esc(x["d"]), GH, esc(x["f"]), esc(x["k"]), esc(" · ".join(bits))))))
+    for n in data["news"]:
+        body = "\n\n".join(n["paras"])
+        if n["bullets"]:
+            body += "\n\n" + "\n".join("- " + b["t"] + (" (%s)" % b["path"] if b["path"] else "")
+                                       for b in n["bullets"])
+        entries.append((n["id"], 2, 0, (
+            "<entry><title>%s</title><id>tag:v3r1t4s.org,2026:weekly/%s</id><updated>%sT00:00:00Z</updated>"
+            '<link rel="alternate" type="text/html" href="%s/#w-%s"/>'
+            '<content type="text">%s</content></entry>'
+            % (esc(n["title"]), esc(n["id"]), esc(n["id"]), esc(u), esc(n["id"]), esc(body)))))
+    entries.sort(key=lambda e: e[:3], reverse=True)
+    return ('<?xml version="1.0" encoding="utf-8"?>\n<feed xmlns="http://www.w3.org/2005/Atom">'
+            "<title>V3R1T4S</title><subtitle>Daily discoveries and V3R1T4S Weekly. Not peer reviewed: every result "
+            "ships with its own checker.</subtitle>"
+            '<id>%s/</id><updated>%s</updated><link rel="self" type="application/atom+xml" href="%s/feed.xml"/>'
+            '<link rel="alternate" type="text/html" href="%s/"/><author><name>V3R1T4S</name><uri>%s</uri></author>'
+            "<icon>%s/favicon.svg</icon><logo>%s/og.png</logo>\n%s\n</feed>\n"
+            % (esc(u), esc(data["built"]), esc(u), esc(u), GH, esc(u), esc(u), "\n".join(e[3] for e in entries)))
+
+
+def write(out, rel, text):
+    with open(os.path.join(out, rel), "w", encoding="utf-8", newline="\n") as f:
+        f.write(text)
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--out", default=os.path.join(HERE, "public"))
-    ap.add_argument("--offline", action="store_true", help="no git history and no GitHub API (votes skipped)")
+    ap.add_argument("--offline", action="store_true", help="no git history: discovery dates from folder names")
     a = ap.parse_args()
     offline = a.offline or os.environ.get("V3R1T4S_OFFLINE") == "1"
     out = os.path.realpath(a.out)
@@ -656,42 +809,42 @@ def main():
     if os.path.isdir(out) and out != default and os.listdir(out) and not os.path.exists(os.path.join(out, "data.json")):
         sys.exit("refusing to clear %s: not empty and not a previous build" % out)
 
-    data = collect(offline)
     site_url = valid_site_url(os.environ.get("SITE_URL"))
+    data = collect(offline)
+    pages = {n: render_template(n, data, site_url) for n in TEMPLATES if os.path.isfile(os.path.join(SRC, n))}
+    if "index.html" not in pages:
+        sys.exit("site/src/index.html is missing")
 
     if os.path.isdir(out) and not os.path.islink(out):
         shutil.rmtree(out)
     os.makedirs(out)
-    # static files from site/src (ours, not contributor content), copied without following symlinks
+    # static files from site/src (ours, not contributor content; fonts/ included), copied without following
+    # symlinks. Templates are rendered instead of copied, and dotfiles are skipped.
     for root, dirs, files in os.walk(SRC):
-        dirs[:] = [d for d in dirs if not os.path.islink(os.path.join(root, d))]
+        dirs[:] = [d for d in dirs if not os.path.islink(os.path.join(root, d)) and not d.startswith(".")]
         for f in files:
             sp = os.path.join(root, f)
-            if os.path.islink(sp) or f == "index.html" and root == SRC or f.startswith("."):
+            if os.path.islink(sp) or (f in TEMPLATES and root == SRC) or f.startswith("."):
                 continue
             dp = os.path.join(out, os.path.relpath(sp, SRC))
             os.makedirs(os.path.dirname(dp), exist_ok=True)
             shutil.copyfile(sp, dp)
-    with open(os.path.join(out, "index.html"), "w", encoding="utf-8") as f:
-        f.write(render_index(data, site_url))
+    for n, text in pages.items():
+        write(out, n, text)
     with open(os.path.join(out, "data.json"), "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=True, separators=(",", ":"))
-    robots = "User-agent: *\nAllow: /\n"
-    if site_url:
-        robots += "Sitemap: %s/sitemap.xml\n" % site_url
-        with open(os.path.join(out, "sitemap.xml"), "w", encoding="utf-8") as f:
-            f.write('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
-                    "<url><loc>%s/</loc><lastmod>%s</lastmod></url></urlset>\n"
-                    % (html.escape(site_url), data["built"][:10]))
-    with open(os.path.join(out, "robots.txt"), "w", encoding="utf-8") as f:
-        f.write(robots)
+    write(out, "feed.xml", atom_feed(data, site_url))
+    write(out, "sitemap.xml",
+          '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+          "<url><loc>%s/</loc><lastmod>%s</lastmod></url></urlset>\n" % (esc(site_url), esc(data["built"][:10])))
+    write(out, "robots.txt", "User-agent: *\nAllow: /\nSitemap: %s/sitemap.xml\n" % site_url)
 
     c = data["counts"]
-    print("site/public: %d discoveries, %d on the leaderboard, %d known unknowns in %d categories"
-          % (len(data["feed"]), len(data["board"]), len(data["ku"]), len(data["cats"])))
+    print("site/public: %d discoveries, %d on the leaderboard, %d known unknowns in %d categories, %d weekly editions"
+          % (len(data["feed"]), len(data["board"]), len(data["ku"]), len(data["cats"]), len(data["news"])))
     print("counts: %s" % json.dumps(c))
-    print("history: %s, votes: %s, stars: %s, site_url: %s, warnings: %d"
-          % (data["history"], data["votes"], data["stars"], site_url, len(warnings)))
+    print("history: %s, site_url: %s, pages: %s, warnings: %d"
+          % (data["history"], site_url, ", ".join(sorted(pages)), len(warnings)))
 
 
 if __name__ == "__main__":
