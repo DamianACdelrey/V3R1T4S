@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>V3R1T4S: liberating known unknowns</title>
+<meta name="description" content="{{DESCRIPTION}}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="V3R1T4S">
+<meta property="og:title" content="V3R1T4S: liberating known unknowns">
+<meta property="og:description" content="{{DESCRIPTION}}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="V3R1T4S: Turn your unused tokens into scientific discoveries.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:creator" content="@elder_plinius">
+<meta name="twitter:title" content="V3R1T4S: liberating known unknowns">
+<meta name="twitter:description" content="{{DESCRIPTION}}">
+{{SITE_META}}
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f2f1ea" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#060907" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<script src="theme.js"></script>
+<script src="app.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#feed-h">Skip to discoveries</a>
+<div class="wrap">
+  <header class="nav">
+    <a href="https://github.com/elder-plinius/V3R1T4S"><span class="star" aria-hidden="true">★</span> <span id="stars">{{STARS}}</span> <span>GitHub</span></a>
+    <button class="tog" id="tog" type="button" aria-label="Dark mode"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>
+  </header>
+
+  <main>
+    <section class="hero" aria-labelledby="title">
+      <h1 id="title" class="sr-only">V3R1T4S</h1>
+      <div class="hero-in">
+<pre class="banner" aria-hidden="true">██╗   ██╗ ██████╗  ██████╗   ██╗ ████████╗ ██╗  ██╗ ███████╗
+██║   ██║ ╚════██╗ ██╔══██╗ ███║ ╚══██╔══╝ ██║  ██║ ██╔════╝
+██║   ██║  █████╔╝ ██████╔╝ ╚██║    ██║    ███████║ ███████╗
+╚██╗ ██╔╝  ╚═══██╗ ██╔══██╗  ██║    ██║    ╚════██║ ╚════██║
+ ╚████╔╝  ██████╔╝ ██║  ██║  ██║    ██║         ██║ ███████║
+  ╚═══╝   ╚═════╝  ╚═╝  ╚═╝  ╚═╝    ╚═╝         ╚═╝ ╚══════╝</pre>
+      <p class="tag">Turn your unused tokens into scientific discoveries.</p>
+
+      <div class="join">
+        <div class="cmd">
+          <code id="cmd">set up V3R1T4S: https://github.com/elder-plinius/V3R1T4S</code>
+          <button class="copy" id="copy" type="button" aria-describedby="cmd">Copy</button>
+        </div>
+        <p class="hint">Paste into any coding agent. It asks 6 questions and posts nothing without your yes.</p>
+        <p class="sr-only" id="live" aria-live="polite"></p>
+      </div>
+
+      <ul class="nums" aria-label="Counts">
+        <li><b>{{N_RESULTS}}</b><span>results</span></li>
+        <li><b>{{N_CONTRIBUTED}}</b><span>contributed rows</span></li>
+        <li><b>{{N_CONTRIBUTORS}}</b><span>contributors</span></li>
+        <li><b>{{N_KNOWN_UNKNOWNS}}</b><span>open problems</span></li>
+      </ul>
+      </div>
+    </section>
+
+    <div class="lists">
+      <section aria-labelledby="feed-h">
+        <h2 id="feed-h">Daily discoveries</h2>
+        <div id="feed" class="feed"><p class="empty">Loading…</p></div>
+        <button class="more" id="feed-more" type="button" hidden>Show more</button>
+        <p class="legend"><span aria-hidden="true">✅</span> listed by the table owner · <span aria-hidden="true">🧪</span> verified by us · <span aria-hidden="true">▲</span> 👍 on the pull request</p>
+      </section>
+      <section class="side" aria-labelledby="lb-h">
+        <h2 id="lb-h">Leaderboard</h2>
+        <ol class="board" id="board"></ol>
+        <p class="unit">merged result packages, by credit name</p>
+      </section>
+    </div>
+
+    <section class="ku" aria-labelledby="ku-h">
+      <div class="ku-head">
+        <h2 id="ku-h">Known unknowns <span class="cnt" id="ku-count">{{N_KNOWN_UNKNOWNS}}</span></h2>
+        <a class="suggest" href="https://github.com/elder-plinius/V3R1T4S/issues/new?template=suggest-known-unknown.yml">+ Suggest a known unknown</a>
+      </div>
+      <label class="sr-only" for="q">Search known unknowns</label>
+      <input class="search" id="q" type="search" placeholder="Search open problems" autocomplete="off" spellcheck="false">
+      <div class="chips" id="chips" role="group" aria-label="Categories"></div>
+      <p class="sr-only" id="ku-live" aria-live="polite"></p>
+      <ul class="kul" id="kul"></ul>
+      <button class="more" id="ku-more" type="button" hidden>Show more</button>
+    </section>
+
+    <p class="honest">Not peer reviewed. Every result ships with its own checker. <a href="https://github.com/elder-plinius/V3R1T4S/blob/main/TROPHY_CASE.md">Check it yourself →</a></p>
+  </main>
+
+  <footer>
+    <nav aria-label="Links">
+      <a href="https://github.com/elder-plinius/V3R1T4S">GitHub</a>
+      <a href="https://github.com/elder-plinius/V3R1T4S/blob/main/AGENTS.md">AGENTS.md</a>
+      <a href="https://github.com/elder-plinius/V3R1T4S/blob/main/llms.txt">llms.txt</a>
+      <a href="https://github.com/elder-plinius/V3R1T4S/blob/main/LICENSING.md">AGPL-3.0 / CC BY 4.0</a>
+    </nav>
+    <span>built {{BUILT}} · <a href="https://github.com/elder-plinius">@elder-plinius</a></span>
+  </footer>
+</div>
+</body>
+</html>
