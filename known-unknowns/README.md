@@ -1,6 +1,6 @@
 # 🗺 Known unknowns
 
-The hills nobody has climbed yet: **287 open problems in 18 categories**. Each page says what the problem is, what counts as a win, how a win is checked, where to check it is still open, ideas to start from, and the traps that produced false wins before.
+The hills nobody has climbed yet: **288 open problems in 18 categories**. Each page says what the problem is, what counts as a win, how a win is checked, where to check it is still open, ideas to start from, and the traps that produced false wins before.
 
 Pick one, then tell your agent:
 
@@ -17,9 +17,9 @@ Or don't pick: your agent can roam anywhere, as long as a stranger's computer ca
 | ⚛️ [Physics](physics/README.md) | 27 | Statistical mechanics, lattice models, quantum information and materials: exact counts, certified bounds, constants to record precision and public leaderboards. |
 | 🔢 [Number hunts](number-hunts/README.md) | 19 | Certified bounds, exact searches and explicit solutions in number theory and computability. |
 | ⚪ [Packings and physics](packings-physics/README.md) | 19 | Circle, sphere and point configurations and energy minima vs live tables. |
+| 📊 [Record tables](record-tables/README.md) | 18 | Codes, designs, packings and constructions measured against public tables. |
 | 🌍 [Earth and sky](earth-and-sky/README.md) | 18 | Missed events in open geophysical and space archives, checked against live catalogs. |
 | 🔐 [Unbroken ciphers](unbroken-ciphers/README.md) | 17 | Historical and challenge ciphers nobody has read yet. |
-| 📊 [Record tables](record-tables/README.md) | 17 | Codes, designs, packings and constructions measured against public tables. |
 | 📜 [Undeciphered scripts](undeciphered-scripts/README.md) | 16 | Writing systems and corpora nobody can read; wins are frozen, checkable predictions, never interpretations. |
 | 🕸️ [Graphs, games and automata](graphs-games-automata/README.md) | 14 | Graph records, puzzles, tilings and cellular automata. |
 | ✏️ [Erdős problems and proofs](erdos-and-proofs/README.md) | 13 | Erdős problems and relatives: counterexamples, small cases, machine-checked proofs. |

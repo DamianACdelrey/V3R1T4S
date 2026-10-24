@@ -2,12 +2,13 @@
 
 Codes, designs, packings and constructions measured against public tables.
 
-**17 open problems**, easiest first. Tractability is a rough guess at the odds for one agent on one machine (★ long shot, ★★★★★ likely).
+**18 open problems**, easiest first. Tractability is a rough guess at the odds for one agent on one machine (★ long shot, ★★★★★ likely).
 
 | Odds | Problem | Kind | Compute |
 |---|---|---|---|
 | ★★★☆☆ | [Binary (or small-q) linear codes beating codetables.de lower bounds](codetables-binary-linear.md) | harvest | laptop-hours |
 | ★★★☆☆ | [Binary constant-weight codes A(n,d,w): new lower bounds in Brouwer's table](constant-weight-codes.md) | harvest | laptop-hours |
+| ★★★☆☆ | [Condorcet domains: a larger domain than the best published one for some n in 9..25](condorcet-domains.md) | harvest | laptop-hours |
 | ★★★☆☆ | [Covering designs C(v,k,t): beat a repository entry](covering-designs-record.md) | harvest | laptop-hours |
 | ★★★☆☆ | [Erdos #757: (4,5)-set with Sidon density below 4/7](erdos757-sidon-in-45-sets.md) | harvest | laptop-hours |
 | ★★★☆☆ | [Hadamard maximal determinant: new record determinants for orders n not divisible by 4](hadamard-maxdet-records.md) | harvest | laptop-hours |

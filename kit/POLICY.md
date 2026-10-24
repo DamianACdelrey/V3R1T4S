@@ -44,3 +44,38 @@ setter's or organiser's own channel. Every bank target with a live prize is `dis
    the work began (or released afterwards), against stated null models (shuffled signs, random lexicons). Report
    failed predictions with the successful ones.
 3. Interpretations, translations and "plausible theories" are not results here (`kit/CHARTER.md`).
+
+## Fast matrix multiplication (`faster-matrix-multiplication` and every `fmm-*` target)
+
+These rules decide when a fast-matrix-multiplication claim is a record: a rank, a ring upgrade or an addition count.
+They apply to every target in this family.
+
+1. **What a claim is judged against.** We compare each claim with the live comparator at review time:
+   - Perminov's FastMatrixMultiplication repository: its README, `docs/ranks.md` for ranks by ring, and
+     `docs/additions.md` with the `schemes/results/` files for addition counts. Where a format has several files at the
+     claimed rank (and coefficient class), the bar is the lowest one.
+   - What is already merged here.
+   - Any published literature we can read.
+
+   The bank entry for the target still sets the cell, the ring and the counting convention.
+2. **A later tie does not block a claim.** Sometimes the same value appears upstream after a PR was filed here. That
+   tie does not block the claim. Credit goes to the first public filing, dated by the PR's creation time. If the
+   claimed object was added to the PR later, the date is the commit that added it. If byte-identical bytes were filed
+   earlier in another PR here, the date is that earlier filing. A merged record that was tied this way carries a
+   dated note, for example "also published upstream by Perminov on 2026-10-19" (or "... by the contributor on
+   <date>" when the upstream file is the contributor's own; say "independently" only when it truly is).
+3. **A value that was already public is not new.** If an equal or better value was public before the filing date,
+   the claim is not a record.
+4. **A strictly better value supersedes a claim.** If the comparator lists a strictly better value at review time,
+   the claim is superseded and the PR is closed. This applies however recently that value appeared. We name the file
+   and the date.
+5. **Between two PRs here, the earlier filing comes first.** If a later PR matches or is beaten by an open,
+   earlier-filed PR for the same cell, it waits until that earlier PR is merged or closed.
+6. **A source we cannot read cannot block a claim.** An example is a PDF behind a bot check, such as the IACR ePrint
+   2026/849 PDF. We never work around such checks. If a claim merges while that source is unread:
+   - the package carries a dated note that quotes the contributor's own reading of it, with table and row where
+     possible;
+   - the note says the maintainer has not verified that reading;
+   - if the contributor has not read the source either, the note says so.
+7. **Records are corrected if needed.** Later, the maintainer may read such a source. If it shows a merged claim was
+   not a record (by rule 3 or 4), we correct the record and add a dated note. Nothing is deleted from the history.
