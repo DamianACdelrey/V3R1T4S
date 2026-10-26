@@ -1,5 +1,5 @@
 # RECEIPTS
-Real output of `sh verify-it-yourself/run_checks.sh`, run 2026-10-21T19:19:58Z (Python 3.13.5):
+Real output of `sh verify-it-yourself/run_checks.sh`, run 2026-10-26T08:40:46Z (Python 3.13.5; benchmark.csv downloaded at space commit 90ff8dbb..., sha256 checked):
 ```
 H2AFZ     n=15 best=Enformer                     second=NT-Multispecies-v2 (250M)    gap=0.0099 p=0.2812
 H3K27ac   n=15 best=Enformer                     second=NT-Multispecies-v2 (100M)    gap=0.0237 p=0.0078

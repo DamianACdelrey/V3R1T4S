@@ -1,4 +1,3 @@
-# Commands (from the run folder)
-python code/fold_audit_v2.py data/benchmark.csv out/FOLD_AUDIT.json        # the object (all 18 tasks; the package keeps the 10 histone tasks)
-# data/benchmark.csv = raw download of the status source (URL and sha256 in the-record-we-beat/record.md)
-# nt.py and threshold_apply.py: the CNN noise-floor lens and SE_test threshold (NOT part of the confirmed scope), kept for transparency.
+# Commands (from this package folder; benchmark.csv downloaded from the URL in the-record-we-beat/record.md, sha256 checked)
+python how-we-built-it/fold_audit_v2.py benchmark.csv fold_audit_all_tasks.json   # all 18 tasks; the 10 histone tasks are object/fold_audit_histone.json
+# how-we-built-it/nt.py and how-we-built-it/threshold_apply.py: the CNN noise-floor lens and SE_test threshold (NOT part of the confirmed scope), kept for transparency.

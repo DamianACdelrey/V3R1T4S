@@ -1,7 +1,7 @@
-# Honesty gate (kit RUN.md step 7): run 2026-10-21-1738, nucleotide-transformer-benchmark-mcc, partial win p3
+# Honesty gate (kit RUN.md step 7): nucleotide-transformer-benchmark-mcc, partial win p3
 
 status: CONFIRMED_PARTIAL
-confirmed_scope: On the 10 histone tasks of benchmark.csv (sha256 a93c1e72...), an exact paired sign-flip test over the 10 per-fold MCC values of every pair of entries with exactly 10 folds (3 HyenaDNA rows excluded) reproduces claim/objects/FOLD_AUDIT.json exactly and shows the best entry is not significantly above the second (p >= 0.05) on H2AFZ, H3K36me3, H3K4me1, H3K4me3, H3K9me3 and H4K20me1; the SE_test-based threshold is not confirmed.
+confirmed_scope: On the 10 histone tasks of benchmark.csv (sha256 a93c1e72...), an exact paired sign-flip test over the 10 per-fold MCC values of every pair of entries with exactly 10 folds (3 HyenaDNA rows excluded) reproduces object/fold_audit_histone.json exactly and shows the best entry is not significantly above the second (p >= 0.05) on H2AFZ, H3K36me3, H3K4me1, H3K4me3, H3K9me3 and H4K20me1; the SE_test-based threshold is not confirmed.
 
 Caveats bound to this scope (from the three panel files; they narrow, never widen):
 - The 10 folds share one test set and overlapping training data; the sign-flip test treats fold differences as exchangeable, so p-values are

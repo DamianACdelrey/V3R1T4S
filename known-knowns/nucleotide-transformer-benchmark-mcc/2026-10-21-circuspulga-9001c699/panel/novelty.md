@@ -1,21 +1,21 @@
 # NOVELTY skeptic
-context: subagent (fresh-context knowledgeWork subagent started by the parent session; given only claim/ and the kit/RUN.md step-6 NOVELTY instruction)
+context: subagent (fresh-context knowledgeWork subagent started by the parent session; given only the claim folder (now this package) and the kit/RUN.md step-6 NOVELTY instruction)
 
 Instruction (kit/RUN.md step 6, verbatim): "Fetch the primary table or status page once, honestly (no retries; a block means fail), and quote URL, value and time. Search the last 24 months of literature, this repo's TROPHY_CASE.md and open pull requests. Pass only if the result strictly beats everything known. A tie is not a record."
 
-Claim judged: partial win p3 in claim/CLAIM.md (fold-to-fold variance audit of the 10 histone tasks of benchmark.csv; paired sign-flip best vs second; test-sampling SE threshold from claim/objects/THRESHOLD.json and claim/objects/FOLD_AUDIT.json). For an audit-type partial win, "beats everything known" is read as: not already published, not subsumed by a published analysis.
+Claim judged: partial win p3 in README.md (fold-to-fold variance audit of the 10 histone tasks of benchmark.csv; paired sign-flip best vs second; test-sampling SE threshold from the CNN threshold output (not shipped; outside the confirmed scope) and object/fold_audit_histone.json). For an audit-type partial win, "beats everything known" is read as: not already published, not subsumed by a published analysis.
 
 ## 1. Status source (fetched once, no retries)
-- URL (status_source in claim/CLAIM.md): https://huggingface.co/spaces/InstaDeepAI/nucleotide_transformer_benchmark/blob/main/data/benchmark.csv, fetched as its raw file (same path, /resolve/main/), single request.
+- URL (status_source in README.md): https://huggingface.co/spaces/InstaDeepAI/nucleotide_transformer_benchmark/blob/main/data/benchmark.csv, fetched as its raw file (same path, /resolve/main/), single request.
 - Time: 2026-10-21T18:23:59Z. HTTP 200, 274 lines (header + 273 rows), resolved to space commit 90ff8dbbf126daecf33d7c0221e2e5ff241fc354.
-- sha256 a93c1e722f6b15312818903dc048207845598925889f415caaf61e3af7d60ca6, identical to claim/data/benchmark.csv. The table has not moved since the claim's copy.
+- sha256 a93c1e722f6b15312818903dc048207845598925889f415caaf61e3af7d60ca6, identical to benchmark.csv (the-record-we-beat/record.md). The table has not moved since the claim's copy.
 - Values (my own recomputation from the live file, rows with exactly 10 MCC folds, exact two-sided sign-flip over 1024 patterns), best vs second ten-fold mean MCC:
   H2AFZ Enformer 0.5186 vs NT-MS-v2-250M 0.5087, p=0.281; H3K27ac Enformer 0.5169 vs NT-MS-v2-100M 0.4932, p=0.0078;
   H3K27me3 NT-MS-v2-500M 0.6117 vs NT-1000G-2.5B 0.6028, p=0.029; H3K36me3 NT-MS-v2-500M 0.6412 vs DNABERT-2 0.6353, p=0.314;
   H3K4me1 Enformer 0.4991 vs NT-MS-v2-500M 0.4965, p=0.615; H3K4me2 Enformer 0.6183 vs NT-MS-v2-250M 0.5701, p=0.0020;
   H3K4me3 DNABERT-2 0.6462 vs Enformer 0.6412, p=0.494; H3K9ac Enformer 0.5991 vs NT-MS-v2-250M 0.5684, p=0.0156;
   H3K9me3 NT-1000G-2.5B 0.4807 vs NT-MS-v2-500M 0.4750, p=0.451; H4K20me1 NT-1000G-2.5B 0.6588 vs NT-MS-v2-500M 0.6588, p=0.996.
-  The six p >= 0.05 tasks are exactly the six named in claim/CLAIM.md (H2AFZ, H3K36me3, H3K4me1, H3K4me3, H3K9me3, H4K20me1). This is a novelty-side consistency check only, not the reproduction.
+  The six p >= 0.05 tasks are exactly the six named in README.md (H2AFZ, H3K36me3, H3K4me1, H3K4me3, H3K9me3, H4K20me1). This is a novelty-side consistency check only, not the reproduction.
 - The leaderboard itself (app.py, same space) offers mean/median/min/max aggregation of the folds and no significance test or test-set uncertainty.
 
 ## 2. Literature, last 24 months (2024-10 to 2026-10), read as data
@@ -38,5 +38,5 @@ Methodological note for the gate (not a novelty failure): Zeng et al.'s abstract
 - known-unknowns/biology/nucleotide-transformer-benchmark-mcc.md lists the target as open as of 2026-10-15. Its idea "use paired tests across folds rather than comparing means" is a hint, not a published result.
 
 ## Verdict
-Status source read once and unchanged (sha256 matches claim/data/benchmark.csv). In the readable literature of the last 24 months, this repo's trophy case and its open PRs, I found no published per-task paired fold test of the NT leaderboard's histone rankings and no test-sampling SE threshold applied to them. The closest priors (NT paper's +/- 2 SD bars; arXiv 2604.16570's seed-variance filter) motivate the audit but do not contain it. The p3 audit is new as far as this search reaches. One source is PENDING and not counted; the search is not exhaustive.
+Status source read once and unchanged (sha256 matches benchmark.csv (the-record-we-beat/record.md)). In the readable literature of the last 24 months, this repo's trophy case and its open PRs, I found no published per-task paired fold test of the NT leaderboard's histone rankings and no test-sampling SE threshold applied to them. The closest priors (NT paper's +/- 2 SD bars; arXiv 2604.16570's seed-variance filter) motivate the audit but do not contain it. The p3 audit is new as far as this search reaches. One source is PENDING and not counted; the search is not exhaustive.
 pass: true
