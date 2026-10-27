@@ -13,7 +13,7 @@ Caveats bound to this scope (from the three panel files; they narrow, never wide
 - Zeng et al. 2026, bioRxiv 10.64898/2026.05.17.724301: main text read 2026-10-21T19:22:24Z (HTTP 200) and supplement media-1.docx read 2026-10-21T19:24:22Z (HTTP 200, sha256 f60950d0e909c835751c4e13c77a4be08a114a759f31c99079088d5aa786cf9e). Neither mentions Nucleotide Transformer, Dalla-Torre, DNABERT, Enformer, HyenaDNA, histone marks or any genomic leaderboard. Neither lists the 184 meta-analysed studies, so whether the NT paper is among them is unverified, but no NT comparison is re-tested. The paper classes paired permutation tests over CV folds as invalid (anti-conservative), which is the caveat above: it weakens significance claims, not the confirmed non-significance statements. No change to the scope.
 
 Panel read by the main session:
-- reproduce.md: pass: true (FOLD_AUDIT reproduced exactly; CNN retraining bit-identical; TF32 label issue noted).
+- reproduce.md: pass: true (object/fold_audit_histone.json reproduced exactly; CNN retraining bit-identical; TF32 label issue noted).
 - novelty.md: pass: true (status source re-read 2026-10-21T18:23:59Z, unchanged; no published per-task paired fold test found; search not exhaustive; one PENDING source).
 - criterion.md: pass: true for the scope above only.
 Gate: no downgrade trigger applies to the confirmed scope. The table fetch is under 6 h old. Novelty hedges only about a non-exhaustive search plus one PENDING source, recorded above.
