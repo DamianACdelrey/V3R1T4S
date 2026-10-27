@@ -14,7 +14,7 @@ date: 2026-10-21 (Europe/Madrid, UTC+2), box CPU only, 1 thread per process, at 
 
 ## Author code, run as given
 - sha256: how-we-built-it/nt.py 7503acd1...6bd9e1c and how-we-built-it/fold_audit_v2.py 2de549f3...613c8772 both equal PREREG / PREREG v2. how-we-built-it/threshold_apply.py (ec3f27ec...42906f5) has no hash in PREREG; I read it and it applies the stated rule literally.
-- `python how-we-built-it/fold_audit_v2.py benchmark.csv fold_audit_all_tasks.json` gives output byte-identical to object/fold_audit_histone.json.
+- `python how-we-built-it/fold_audit_v2.py benchmark.csv fold_audit_all_tasks.json` gives output whose 10 histone tasks have the same pairs, diffs and p-values as object/fold_audit_histone.json.
 - `python how-we-built-it/nt.py nulls` (output dir = copy of the CNN outputs, same call order) gives a NULLS.json equal value-for-value to the CNN null output NULLS.json (not shipped). The only byte difference is CRLF vs LF line endings. Then `python how-we-built-it/threshold_apply.py` gives output byte-identical to the CNN threshold output (not shipped). SE_test 0.0151-0.0331 and threshold 0.0302-0.0662 are exactly as claimed.
 
 ## Determinism / retraining (CPU)
